@@ -14,7 +14,139 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      admins: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          name: string
+          password_hash: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          name: string
+          password_hash: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          password_hash?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          payment_date: string
+          payment_method: string
+          payment_month: string
+          receipt_url: string | null
+          resident_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          payment_date: string
+          payment_method: string
+          payment_month: string
+          receipt_url?: string | null
+          resident_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          payment_date?: string
+          payment_method?: string
+          payment_month?: string
+          receipt_url?: string | null
+          resident_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_resident_id_fkey"
+            columns: ["resident_id"]
+            isOneToOne: false
+            referencedRelation: "residents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      residents: {
+        Row: {
+          created_at: string
+          entry_date: string
+          full_name: string
+          id: string
+          is_active: boolean
+          ktp_image_url: string | null
+          phone_number: string
+          room_id: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          entry_date: string
+          full_name: string
+          id?: string
+          is_active?: boolean
+          ktp_image_url?: string | null
+          phone_number: string
+          room_id: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          entry_date?: string
+          full_name?: string
+          id?: string
+          is_active?: boolean
+          ktp_image_url?: string | null
+          phone_number?: string
+          room_id?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "residents_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: true
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rooms: {
+        Row: {
+          created_at: string
+          id: number
+          is_occupied: boolean
+          room_number: number
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          is_occupied?: boolean
+          room_number: number
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          is_occupied?: boolean
+          room_number?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
