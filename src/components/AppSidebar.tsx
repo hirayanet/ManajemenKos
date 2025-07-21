@@ -96,7 +96,7 @@ export function AppSidebar() {
         </Button>
       </SidebarFooter>
       // Tambahkan menu untuk Riwayat Penghuni
-      <NavLink to="/resident-history" className={({ isActive }) => linkClass(isActive)}>
+      <NavLink to="/resident-history" className={({ isActive }) => getNavCls({ isActive })}>  
         <History className="mr-3 h-5 w-5" />
         Riwayat Penghuni
       </NavLink>
