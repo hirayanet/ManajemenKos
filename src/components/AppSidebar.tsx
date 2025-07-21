@@ -23,6 +23,7 @@ const menuItems = [
   { title: "Data Penghuni", url: "/residents", icon: Users },
   { title: "Pembayaran", url: "/payments", icon: CreditCard },
   { title: "Laporan", url: "/reports", icon: FileText },
+  { title: "Riwayat Penghuni", url: "/resident-history", icon: History }, // Tambahkan menu Riwayat Penghuni ke menu utama
 ];
 
 export function AppSidebar() {
@@ -95,11 +96,6 @@ export function AppSidebar() {
           {!collapsed && <span className="ml-3">Keluar</span>}
         </Button>
       </SidebarFooter>
-      // Tambahkan menu untuk Riwayat Penghuni
-      <NavLink to="/resident-history" className={({ isActive }) => getNavCls({ isActive })}>  
-        <History className="mr-3 h-5 w-5" />
-        Riwayat Penghuni
-      </NavLink>
     </Sidebar>
   );
 }
