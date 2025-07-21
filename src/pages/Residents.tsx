@@ -308,6 +308,37 @@ export default function Residents() {
     setIsDialogOpen(true);
   };
 
+  // Tambahkan fungsi handleMarkAsLeft di sini
+  const handleMarkAsLeft = async (resident: Resident) => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      const { error } = await supabase
+        .from("residents")
+        .update({
+          status_penghuni: "Sudah Keluar",
+          tanggal_keluar: today,
+          is_active: false, // Tetap update is_active untuk kompatibilitas
+        })
+        .eq("id", resident.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Berhasil",
+        description: `${resident.full_name} telah ditandai sudah keluar`,
+      });
+      
+      fetchResidents();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Gagal menandai penghuni keluar",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -398,29 +429,6 @@ export default function Residents() {
                   accept="image/*"
                   onChange={(e) => setKtpFile(e.target.files?.[0] || null)}
                 />
-              </div>
-
-              {formData.marital_status === 'Menikah' && (
-                <div className="space-y-2">
-                  <Label htmlFor="marriage_file">Upload Dokumen Pernikahan</Label>
-                  <Input
-                    id="marriage_file"
-                    type="file"
-                    accept="image/*,application/pdf"
-                    onChange={(e) => setMarriageFile(e.target.files?.[0] || null)}
-                  />
-                </div>
-              )}
-
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="is_active"
-                  checked={formData.is_active}
-                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="rounded border-gray-300"
-                />
-                <Label htmlFor="is_active">Status Aktif</Label>
               </div>
 
               <div className="space-y-2">
@@ -640,33 +648,3 @@ export default function Residents() {
     </div>
   );
 }
-
-const handleMarkAsLeft = async (resident: Resident) => {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    
-    const { error } = await supabase
-      .from("residents")
-      .update({
-        status_penghuni: "Sudah Keluar",
-        tanggal_keluar: today,
-        is_active: false, // Tetap update is_active untuk kompatibilitas
-      })
-      .eq("id", resident.id);
-
-    if (error) throw error;
-
-    toast({
-      title: "Berhasil",
-      description: `${resident.full_name} telah ditandai sudah keluar`,
-    });
-    
-    fetchResidents();
-  } catch (error) {
-    toast({
-      title: "Error",
-      description: "Gagal menandai penghuni keluar",
-      variant: "destructive",
-    });
-  }
-};
