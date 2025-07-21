@@ -27,6 +27,8 @@ interface Resident {
   entry_date: string;
   is_active: boolean;
   ktp_image_url?: string;
+  marital_status: string;
+  marriage_document_url?: string;
   created_at: string;
   rooms: { room_number: number };
 }
@@ -38,6 +40,7 @@ export default function Residents() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [ktpFile, setKtpFile] = useState<File | null>(null);
+  const [marriageFile, setMarriageFile] = useState<File | null>(null);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -46,6 +49,7 @@ export default function Residents() {
     room_id: "",
     entry_date: "",
     is_active: true,
+    marital_status: "Lajang",
   });
 
   useEffect(() => {
@@ -112,6 +116,26 @@ export default function Residents() {
     return publicUrl;
   };
 
+  const uploadMarriageDocument = async (file: File, residentId: string) => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `marriage_${residentId}.${fileExt}`;
+    const filePath = `marriage/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('ktp-images')
+      .upload(filePath, file, {
+        upsert: true
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('ktp-images')
+      .getPublicUrl(filePath);
+
+    return publicUrl;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -127,6 +151,7 @@ export default function Residents() {
             room_id: parseInt(formData.room_id),
             entry_date: formData.entry_date,
             is_active: formData.is_active,
+            marital_status: formData.marital_status,
           })
           .eq("id", selectedResident.id);
 
@@ -138,6 +163,15 @@ export default function Residents() {
           await supabase
             .from("residents")
             .update({ ktp_image_url: imageUrl })
+            .eq("id", selectedResident.id);
+        }
+
+        // Upload marriage document if file selected and married
+        if (marriageFile && formData.marital_status === 'Menikah') {
+          const marriageUrl = await uploadMarriageDocument(marriageFile, selectedResident.id);
+          await supabase
+            .from("residents")
+            .update({ marriage_document_url: marriageUrl })
             .eq("id", selectedResident.id);
         }
 
@@ -155,6 +189,7 @@ export default function Residents() {
             room_id: parseInt(formData.room_id),
             entry_date: formData.entry_date,
             is_active: formData.is_active,
+            marital_status: formData.marital_status,
           })
           .select()
           .single();
@@ -167,6 +202,15 @@ export default function Residents() {
           await supabase
             .from("residents")
             .update({ ktp_image_url: imageUrl })
+            .eq("id", newResident.id);
+        }
+
+        // Upload marriage document if file selected and married
+        if (marriageFile && formData.marital_status === 'Menikah' && newResident) {
+          const marriageUrl = await uploadMarriageDocument(marriageFile, newResident.id);
+          await supabase
+            .from("residents")
+            .update({ marriage_document_url: marriageUrl })
             .eq("id", newResident.id);
         }
 
@@ -220,9 +264,11 @@ export default function Residents() {
       room_id: "",
       entry_date: "",
       is_active: true,
+      marital_status: "Lajang",
     });
     setSelectedResident(null);
     setKtpFile(null);
+    setMarriageFile(null);
   };
 
   const openEditDialog = (resident: Resident) => {
@@ -233,6 +279,7 @@ export default function Residents() {
       room_id: resident.room_id.toString(),
       entry_date: resident.entry_date,
       is_active: resident.is_active,
+      marital_status: resident.marital_status || "Lajang",
     });
     setIsDialogOpen(true);
   };
@@ -312,6 +359,19 @@ export default function Residents() {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="marital_status">Status Pernikahan</Label>
+                <Select value={formData.marital_status} onValueChange={(value) => setFormData({ ...formData, marital_status: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih status pernikahan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Lajang">Lajang</SelectItem>
+                    <SelectItem value="Menikah">Menikah</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="ktp_file">Upload KTP</Label>
                 <Input
                   id="ktp_file"
@@ -320,6 +380,18 @@ export default function Residents() {
                   onChange={(e) => setKtpFile(e.target.files?.[0] || null)}
                 />
               </div>
+
+              {formData.marital_status === 'Menikah' && (
+                <div className="space-y-2">
+                  <Label htmlFor="marriage_file">Upload Dokumen Pernikahan</Label>
+                  <Input
+                    id="marriage_file"
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => setMarriageFile(e.target.files?.[0] || null)}
+                  />
+                </div>
+              )}
 
               <div className="flex items-center space-x-2">
                 <input
@@ -357,8 +429,10 @@ export default function Residents() {
                 <TableHead>No. Telepon</TableHead>
                 <TableHead>Kamar</TableHead>
                 <TableHead>Tanggal Masuk</TableHead>
+                <TableHead>Status Pernikahan</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>KTP</TableHead>
+                <TableHead>Dokumen</TableHead>
                 <TableHead>Aksi</TableHead>
               </TableRow>
             </TableHeader>
@@ -369,6 +443,11 @@ export default function Residents() {
                   <TableCell>{resident.phone_number}</TableCell>
                   <TableCell>Kamar {resident.rooms.room_number}</TableCell>
                   <TableCell>{format(new Date(resident.entry_date), "dd/MM/yyyy")}</TableCell>
+                  <TableCell>
+                    <Badge variant={resident.marital_status === 'Menikah' ? "default" : "secondary"}>
+                      {resident.marital_status || "Lajang"}
+                    </Badge>
+                  </TableCell>
                   <TableCell>
                     <Badge variant={resident.is_active ? "default" : "secondary"}>
                       {resident.is_active ? "Aktif" : "Tidak Aktif"}
@@ -382,6 +461,19 @@ export default function Residents() {
                         onClick={() => window.open(resident.ktp_image_url, '_blank')}
                       >
                         <User className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {resident.marriage_document_url ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(resident.marriage_document_url, '_blank')}
+                      >
+                        <Upload className="h-4 w-4" />
                       </Button>
                     ) : (
                       <span className="text-muted-foreground">-</span>

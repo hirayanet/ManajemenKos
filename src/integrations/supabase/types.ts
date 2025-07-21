@@ -90,6 +90,8 @@ export type Database = {
           id: string
           is_active: boolean
           ktp_image_url: string | null
+          marital_status: string | null
+          marriage_document_url: string | null
           phone_number: string
           room_id: number
           updated_at: string
@@ -101,6 +103,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           ktp_image_url?: string | null
+          marital_status?: string | null
+          marriage_document_url?: string | null
           phone_number: string
           room_id: number
           updated_at?: string
@@ -112,6 +116,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           ktp_image_url?: string | null
+          marital_status?: string | null
+          marriage_document_url?: string | null
           phone_number?: string
           room_id?: number
           updated_at?: string
