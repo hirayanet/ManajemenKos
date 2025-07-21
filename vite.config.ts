@@ -5,9 +5,12 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  base: "/", // Tambahkan base URL
   server: {
     host: "::",
     port: 8080,
+    // Tambahkan konfigurasi fallback untuk SPA
+    historyApiFallback: true,
   },
   plugins: [
     react(),
