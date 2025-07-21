@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Users, Home, CreditCard, TrendingUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "@/hooks/use-toast"; // Add this import
 
 interface DashboardStats {
   totalRooms: number;
@@ -34,17 +35,20 @@ const Dashboard = () => {
           .select("*, rooms(room_number)");
         
         // Coba gunakan status_penghuni, jika error gunakan is_active
+        let residents;
         try {
-          const { data: residents, error } = await residentsQuery
+          const { data: residentsData, error } = await residentsQuery
             .eq("status_penghuni", "Aktif");
           if (error) throw error;
+          residents = residentsData;
           // Proses data residents
         } catch (error) {
           console.warn("Fallback to is_active filter", error);
-          const { data: residents } = await supabase
+          const { data: residentsData } = await supabase
             .from("residents")
             .select("*, rooms(room_number)")
             .eq("is_active", true);
+          residents = residentsData;
           // Proses data residents
         }
 
