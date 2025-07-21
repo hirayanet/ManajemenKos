@@ -25,13 +25,28 @@ const Dashboard = () => {
     const fetchDashboardData = async () => {
       try {
         // Get room statistics
-        const { data: rooms } = await supabase.from("rooms").select("*");
+        const { data: rooms, error: roomsError } = await supabase.from("rooms").select("*");
+        if (roomsError) throw roomsError;
         
         // Get active residents
-        const { data: residents } = await supabase
+        let residentsQuery = supabase
           .from("residents")
-          .select("*, rooms(room_number)")
-          .eq("status_penghuni", "Aktif"); // Ubah filter dari is_active ke status_penghuni
+          .select("*, rooms(room_number)");
+        
+        // Coba gunakan status_penghuni, jika error gunakan is_active
+        try {
+          const { data: residents, error } = await residentsQuery
+            .eq("status_penghuni", "Aktif");
+          if (error) throw error;
+          // Proses data residents
+        } catch (error) {
+          console.warn("Fallback to is_active filter", error);
+          const { data: residents } = await supabase
+            .from("residents")
+            .select("*, rooms(room_number)")
+            .eq("is_active", true);
+          // Proses data residents
+        }
 
         // Get current month payments
         const currentMonth = new Date().toISOString().slice(0, 7); // Format: YYYY-MM
@@ -57,13 +72,18 @@ const Dashboard = () => {
         const { data: recentResidentsData } = await supabase
           .from("residents")
           .select("*, rooms(room_number)")
-          .eq("is_active", true)
+          .eq("status_penghuni", "Aktif") // Ubah dari is_active ke status_penghuni
           .order("created_at", { ascending: false })
           .limit(5);
 
         setRecentResidents(recentResidentsData || []);
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
+        toast({
+          title: "Error",
+          description: "Gagal memuat data dashboard. Silakan coba lagi.",
+          variant: "destructive",
+        });
       } finally {
         setLoading(false);
       }

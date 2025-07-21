@@ -55,7 +55,13 @@ const App = () => (
             </AuthGuard>
           } />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="/resident-history" element={<ResidentHistory />} />
+          <Route path="/resident-history" element={
+            <AuthGuard>
+              <Layout>
+                <ResidentHistory />
+              </Layout>
+            </AuthGuard>
+          } />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
