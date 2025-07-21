@@ -31,6 +31,8 @@ interface Resident {
   marriage_document_url?: string;
   created_at: string;
   rooms: { room_number: number };
+  status_penghuni: string; // Tambahkan field baru
+  tanggal_keluar?: string; // Tambahkan field baru
 }
 
 export default function Residents() {
@@ -50,6 +52,8 @@ export default function Residents() {
     entry_date: "",
     is_active: true,
     marital_status: "Lajang",
+    status_penghuni: "Aktif", // Tambahkan field baru
+    tanggal_keluar: "", // Tambahkan field baru
   });
 
   useEffect(() => {
@@ -57,16 +61,24 @@ export default function Residents() {
     fetchRooms();
   }, []);
 
+  const [statusFilter, setStatusFilter] = useState<"Aktif" | "Sudah Keluar" | "Semua">("Aktif");
+
   const fetchResidents = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("residents")
         .select(`
           *,
           rooms (room_number)
-        `)
-        .order("created_at", { ascending: false });
-
+        `);
+      
+      // Filter berdasarkan status
+      if (statusFilter !== "Semua") {
+        query = query.eq("status_penghuni", statusFilter);
+      }
+      
+      const { data, error } = await query.order("created_at", { ascending: false });
+  
       if (error) throw error;
       setResidents(data || []);
     } catch (error) {
@@ -152,6 +164,8 @@ export default function Residents() {
             entry_date: formData.entry_date,
             is_active: formData.is_active,
             marital_status: formData.marital_status,
+            status_penghuni: formData.status_penghuni,
+            tanggal_keluar: formData.status_penghuni === "Sudah Keluar" ? formData.tanggal_keluar : null,
           })
           .eq("id", selectedResident.id);
 
@@ -190,6 +204,7 @@ export default function Residents() {
             entry_date: formData.entry_date,
             is_active: formData.is_active,
             marital_status: formData.marital_status,
+            status_penghuni: "Aktif", // Penghuni baru selalu aktif
           })
           .select()
           .single();
@@ -265,6 +280,8 @@ export default function Residents() {
       entry_date: "",
       is_active: true,
       marital_status: "Lajang",
+      status_penghuni: "Aktif",
+      tanggal_keluar: "",
     });
     setSelectedResident(null);
     setKtpFile(null);
@@ -280,6 +297,8 @@ export default function Residents() {
       entry_date: resident.entry_date,
       is_active: resident.is_active,
       marital_status: resident.marital_status || "Lajang",
+      status_penghuni: resident.status_penghuni || "Aktif",
+      tanggal_keluar: resident.tanggal_keluar || "",
     });
     setIsDialogOpen(true);
   };
@@ -404,6 +423,59 @@ export default function Residents() {
                 <Label htmlFor="is_active">Status Aktif</Label>
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="status_penghuni">Status Penghuni</Label>
+                <Select 
+                  value={formData.status_penghuni} 
+                  onValueChange={(value) => setFormData({ ...formData, status_penghuni: value })}
+                  disabled={!selectedResident} // Disable for new residents
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih status penghuni" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Aktif">Aktif</SelectItem>
+                    <SelectItem value="Sudah Keluar">Sudah Keluar</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {formData.status_penghuni === "Sudah Keluar" && (
+                <div className="space-y-2">
+                  <Label htmlFor="tanggal_keluar">Tanggal Keluar</Label>
+                  <Input
+                    id="tanggal_keluar"
+                    type="date"
+                    value={formData.tanggal_keluar}
+                    onChange={(e) => setFormData({ ...formData, tanggal_keluar: e.target.value })}
+                    required={formData.status_penghuni === "Sudah Keluar"}
+                  />
+                </div>
+              )}
+              
+              {formData.marital_status === 'Menikah' && (
+                <div className="space-y-2">
+                  <Label htmlFor="marriage_file">Upload Dokumen Pernikahan</Label>
+                  <Input
+                    id="marriage_file"
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => setMarriageFile(e.target.files?.[0] || null)}
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="is_active"
+                  checked={formData.is_active}
+                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="is_active">Status Aktif</Label>
+              </div>
+
               <div className="flex justify-end space-x-2 pt-4">
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Batal
@@ -418,8 +490,23 @@ export default function Residents() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Daftar Penghuni</CardTitle>
+          <div className="flex space-x-2">
+            <Select value={statusFilter} onValueChange={(value: "Aktif" | "Sudah Keluar" | "Semua") => {
+              setStatusFilter(value);
+              fetchResidents();
+            }}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Aktif">Penghuni Aktif</SelectItem>
+                <SelectItem value="Sudah Keluar">Sudah Keluar</SelectItem>
+                <SelectItem value="Semua">Semua Penghuni</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
@@ -431,6 +518,7 @@ export default function Residents() {
                 <TableHead>Tanggal Masuk</TableHead>
                 <TableHead>Status Pernikahan</TableHead>
                 <TableHead>Status</TableHead>
+                {statusFilter === "Sudah Keluar" && <TableHead>Tanggal Keluar</TableHead>}
                 <TableHead>KTP</TableHead>
                 <TableHead>Dokumen</TableHead>
                 <TableHead>Aksi</TableHead>
@@ -449,10 +537,15 @@ export default function Residents() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={resident.is_active ? "default" : "secondary"}>
-                      {resident.is_active ? "Aktif" : "Tidak Aktif"}
+                    <Badge variant={resident.status_penghuni === 'Aktif' ? "success" : "destructive"}>
+                      {resident.status_penghuni || "Aktif"}
                     </Badge>
                   </TableCell>
+                  {statusFilter === "Sudah Keluar" && (
+                    <TableCell>
+                      {resident.tanggal_keluar ? format(new Date(resident.tanggal_keluar), "dd/MM/yyyy") : "-"}
+                    </TableCell>
+                  )}
                   <TableCell>
                     {resident.ktp_image_url ? (
                       <Button
@@ -488,6 +581,32 @@ export default function Residents() {
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
+                      
+                      {resident.status_penghuni === "Aktif" && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 hover:text-amber-700">
+                              <User className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Tandai Sudah Keluar</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Apakah Anda yakin ingin menandai {resident.full_name} sebagai sudah keluar?
+                                Tindakan ini akan mengubah status kamar menjadi kosong jika tidak ada penghuni aktif lainnya.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Batal</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleMarkAsLeft(resident)}>
+                                Tandai Sudah Keluar
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                      
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button variant="outline" size="sm">
@@ -521,3 +640,33 @@ export default function Residents() {
     </div>
   );
 }
+
+const handleMarkAsLeft = async (resident: Resident) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const { error } = await supabase
+      .from("residents")
+      .update({
+        status_penghuni: "Sudah Keluar",
+        tanggal_keluar: today,
+        is_active: false, // Tetap update is_active untuk kompatibilitas
+      })
+      .eq("id", resident.id);
+
+    if (error) throw error;
+
+    toast({
+      title: "Berhasil",
+      description: `${resident.full_name} telah ditandai sudah keluar`,
+    });
+    
+    fetchResidents();
+  } catch (error) {
+    toast({
+      title: "Error",
+      description: "Gagal menandai penghuni keluar",
+      variant: "destructive",
+    });
+  }
+};

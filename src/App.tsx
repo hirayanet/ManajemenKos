@@ -12,6 +12,8 @@ import Residents from "./pages/Residents";
 import Payments from "./pages/Payments";
 import Reports from "./pages/Reports";
 import AuthGuard from "./components/AuthGuard";
+// Import halaman ResidentHistory
+import ResidentHistory from "./pages/ResidentHistory";
 
 const queryClient = new QueryClient();
 
@@ -53,6 +55,7 @@ const App = () => (
             </AuthGuard>
           } />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="/resident-history" element={<ResidentHistory />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

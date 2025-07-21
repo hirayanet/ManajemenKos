@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+// Tambahkan import untuk icon History
+import { History } from "lucide-react";
 
 const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
@@ -93,6 +95,11 @@ export function AppSidebar() {
           {!collapsed && <span className="ml-3">Keluar</span>}
         </Button>
       </SidebarFooter>
+      // Tambahkan menu untuk Riwayat Penghuni
+      <NavLink to="/resident-history" className={({ isActive }) => linkClass(isActive)}>
+        <History className="mr-3 h-5 w-5" />
+        Riwayat Penghuni
+      </NavLink>
     </Sidebar>
   );
 }

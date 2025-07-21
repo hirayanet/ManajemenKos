@@ -26,10 +26,12 @@ const Dashboard = () => {
       try {
         // Get room statistics
         const { data: rooms } = await supabase.from("rooms").select("*");
+        
+        // Get active residents
         const { data: residents } = await supabase
           .from("residents")
           .select("*, rooms(room_number)")
-          .eq("is_active", true);
+          .eq("status_penghuni", "Aktif"); // Ubah filter dari is_active ke status_penghuni
 
         // Get current month payments
         const currentMonth = new Date().toISOString().slice(0, 7); // Format: YYYY-MM
