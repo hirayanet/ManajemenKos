@@ -8,6 +8,10 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Layout from "./pages/Layout";
 import NotFound from "./pages/NotFound";
+import Residents from "./pages/Residents";
+import Payments from "./pages/Payments";
+import Reports from "./pages/Reports";
+import AuthGuard from "./components/AuthGuard";
 
 const queryClient = new QueryClient();
 
@@ -20,10 +24,34 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
-          <Route path="/residents" element={<Layout><div>Data Penghuni (Coming Soon)</div></Layout>} />
-          <Route path="/payments" element={<Layout><div>Pembayaran (Coming Soon)</div></Layout>} />
-          <Route path="/reports" element={<Layout><div>Laporan (Coming Soon)</div></Layout>} />
+          <Route path="/dashboard" element={
+            <AuthGuard>
+              <Layout>
+                <Dashboard />
+              </Layout>
+            </AuthGuard>
+          } />
+          <Route path="/residents" element={
+            <AuthGuard>
+              <Layout>
+                <Residents />
+              </Layout>
+            </AuthGuard>
+          } />
+          <Route path="/payments" element={
+            <AuthGuard>
+              <Layout>
+                <Payments />
+              </Layout>
+            </AuthGuard>
+          } />
+          <Route path="/reports" element={
+            <AuthGuard>
+              <Layout>
+                <Reports />
+              </Layout>
+            </AuthGuard>
+          } />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
