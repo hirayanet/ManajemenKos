@@ -52,12 +52,21 @@ const Dashboard = () => {
           // Proses data residents
         }
 
-        // Get current month payments
-        const currentMonth = new Date().toISOString().slice(0, 7); // Format: YYYY-MM
+        // Get current month payments (by month name and year)
+        const today = new Date();
+        const currentMonth = today.getMonth(); // 0-based
+        const currentYear = today.getFullYear();
+        const months = [
+          "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+          "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+        ];
+        const currentMonthName = months[currentMonth];
+        // Ambil pembayaran bulan berjalan
         const { data: payments } = await supabase
           .from("payments")
-          .select("amount")
-          .eq("payment_month", currentMonth);
+          .select("amount, payment_date")
+          .eq("payment_month", currentMonthName)
+          .filter('payment_date', 'gte', `${currentYear}-01-01`);
 
         // Calculate stats
         const totalRooms = rooms?.length || 0;

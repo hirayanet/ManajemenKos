@@ -10,8 +10,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { PlusCircle, Edit, Trash2, Download, Receipt } from "lucide-react";
+import { WhatsappIcon } from '@/components/ui/WhatsappIcon';
+import { uploadPDFtoSupabase } from '../lib/supabaseUpload';
+import { jsPDFToBlob } from '../lib/pdfUtils';
 import { format } from "date-fns";
 import jsPDF from "jspdf";
+import logoImg from '../assets/hr_logo_base64'; // (Pastikan file ini ada dan berisi string base64 logo Anda)
+import { generateKwitansiPDF } from '../lib/kwitansiPDF';
 
 interface Resident {
   id: string;
@@ -91,8 +96,31 @@ export default function Payments() {
     }
   };
 
+  // Hanya tampilkan penghuni yang belum membayar bulan berjalan di menu tambah pembayaran
   const fetchResidents = async () => {
     try {
+      // Ambil semua pembayaran bulan berjalan
+      const today = new Date();
+      const currentMonth = today.getMonth(); // 0-based
+      const currentYear = today.getFullYear();
+      // Nama bulan dalam Bahasa Indonesia sesuai array months
+      const months = [
+        "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+        "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+      ];
+      const currentMonthName = months[currentMonth];
+
+      // Ambil semua pembayaran bulan berjalan
+      const { data: paymentsThisMonth, error: paymentsError } = await supabase
+        .from("payments")
+        .select("resident_id, payment_month, payment_date")
+        .eq("payment_month", currentMonthName)
+        .filter('payment_date', 'gte', `${currentYear}-01-01`); // Pastikan tahun sama
+
+      if (paymentsError) throw paymentsError;
+      const paidResidentIds = (paymentsThisMonth || []).map((p: any) => p.resident_id);
+
+      // Ambil penghuni aktif yang BELUM membayar bulan ini
       const { data, error } = await supabase
         .from("residents")
         .select(`
@@ -104,7 +132,11 @@ export default function Payments() {
         .order("full_name");
 
       if (error) throw error;
-      setResidents(data || []);
+      // Filter agar hanya yang belum ada di paidResidentIds dan urutkan berdasarkan room_number
+      const filtered = (data || [])
+        .filter((r: any) => !paidResidentIds.includes(r.id))
+        .sort((a: any, b: any) => (a.rooms?.room_number || 0) - (b.rooms?.room_number || 0));
+      setResidents(filtered);
     } catch (error) {
       toast({
         title: "Error",
@@ -114,45 +146,55 @@ export default function Payments() {
     }
   };
 
+  // Generate and download PDF
   const generateReceiptPDF = (payment: Payment) => {
-    const doc = new jsPDF();
-    
-    // Header
-    doc.setFontSize(20);
-    doc.text("KWITANSI PEMBAYARAN", 105, 30, { align: "center" });
-    
-    doc.setFontSize(16);
-    doc.text("KOS BAHAGIA", 105, 45, { align: "center" });
-    
-    // Line
-    doc.line(20, 55, 190, 55);
-    
-    // Content
-    doc.setFontSize(12);
-    doc.text("Telah terima dari:", 20, 75);
-    doc.text(payment.residents.full_name, 70, 75);
-    
-    doc.text("Kamar:", 20, 90);
-    doc.text(`Kamar ${payment.residents.rooms.room_number}`, 70, 90);
-    
-    doc.text("Untuk pembayaran:", 20, 105);
-    doc.text(`Sewa Kos Bulan ${payment.payment_month}`, 70, 105);
-    
-    doc.text("Jumlah:", 20, 120);
-    doc.text(`Rp ${payment.amount.toLocaleString("id-ID")}`, 70, 120);
-    
-    doc.text("Metode Pembayaran:", 20, 135);
-    doc.text(payment.payment_method, 70, 135);
-    
-    doc.text("Tanggal:", 20, 150);
-    doc.text(format(new Date(payment.payment_date), "dd MMMM yyyy"), 70, 150);
-    
-    // Footer
-    doc.text("Pengelola Kos", 140, 200);
-    doc.text("(_________________)", 140, 230);
-    
-    // Save PDF
-    doc.save(`kwitansi-${payment.residents.full_name}-${payment.payment_month}.pdf`);
+    const doc = generateKwitansiPDF({
+      namaPenyewa: payment.residents.full_name,
+      tanggalMasuk: payment.payment_date, // gunakan payment_date sebagai tanggal masuk (atau ganti dengan field yang benar jika ada)
+      nominal: `Rp ${payment.amount.toLocaleString('id-ID')}`,
+      tanggal: payment.payment_date,
+      logoBase64: logoImg,
+      kamar: payment.residents.rooms?.room_number ? `Kamar ${payment.residents.rooms.room_number}` : '',
+      metodePembayaran: payment.payment_method,
+    });
+    doc.save(`kwitansi-${payment.residents.full_name}-${payment.payment_date}.pdf`);
+  };
+
+  // Generate, upload PDF, and get shareable link
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+
+  const handleShareWhatsapp = async (payment: Payment) => {
+    setUploadingId(payment.id);
+    setShareUrl(null);
+    try {
+      const doc = generateKwitansiPDF({
+        namaPenyewa: payment.residents.full_name,
+        tanggalMasuk: payment.payment_date,
+        nominal: `Rp ${payment.amount.toLocaleString('id-ID')}`,
+        tanggal: payment.payment_date,
+        logoBase64: logoImg,
+        kamar: payment.residents.rooms?.room_number ? `Kamar ${payment.residents.rooms.room_number}` : '',
+        metodePembayaran: payment.payment_method,
+      });
+      const blob = await jsPDFToBlob(doc);
+      const fileName = `kwitansi-${payment.residents.full_name.replace(/\s+/g, "_")}-${payment.payment_date}.pdf`;
+      const url = await uploadPDFtoSupabase(blob, fileName);
+      if (url) {
+        setShareUrl(url);
+        // Optionally update payment record with receipt_url
+        await supabase.from('payments').update({ receipt_url: url }).eq('id', payment.id);
+        // Open WhatsApp share
+        const text = encodeURIComponent(`Berikut kwitansi pembayaran kos: ${url}`);
+        window.open(`https://wa.me/?text=${text}`, '_blank');
+      } else {
+        toast({ title: 'Gagal upload PDF', description: 'Terjadi masalah saat upload kwitansi', variant: 'destructive' });
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Gagal membuat atau upload kwitansi', variant: 'destructive' });
+    } finally {
+      setUploadingId(null);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -389,57 +431,70 @@ export default function Payments() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {payments.map((payment) => (
-                <TableRow key={payment.id}>
-                  <TableCell className="font-medium">{payment.residents.full_name}</TableCell>
-                  <TableCell>Kamar {payment.residents.rooms.room_number}</TableCell>
-                  <TableCell>{payment.payment_month}</TableCell>
-                  <TableCell>{format(new Date(payment.payment_date), "dd/MM/yyyy")}</TableCell>
-                  <TableCell>Rp {payment.amount.toLocaleString("id-ID")}</TableCell>
-                  <TableCell>{payment.payment_method}</TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => generateReceiptPDF(payment)}
-                        title="Download Kwitansi"
-                      >
-                        <Receipt className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openEditDialog(payment)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="outline" size="sm">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Hapus Pembayaran</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Apakah Anda yakin ingin menghapus pembayaran ini? 
-                              Tindakan ini tidak dapat dibatalkan.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Batal</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(payment.id)}>
-                              Hapus
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {payments
+                .slice()
+                .sort((a, b) => (a.residents.rooms.room_number || 0) - (b.residents.rooms.room_number || 0))
+                .map((payment) => (
+                  <TableRow key={payment.id}>
+                    <TableCell className="font-medium">{payment.residents.full_name}</TableCell>
+                    <TableCell>Kamar {payment.residents.rooms.room_number}</TableCell>
+                    <TableCell>{payment.payment_month}</TableCell>
+                    <TableCell>{format(new Date(payment.payment_date), "dd/MM/yyyy")}</TableCell>
+                    <TableCell>Rp {payment.amount.toLocaleString("id-ID")}</TableCell>
+                    <TableCell>{payment.payment_method}</TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => generateReceiptPDF(payment)}
+                          title="Download Kwitansi"
+                        >
+                          <Receipt className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleShareWhatsapp(payment)}
+                          title="Bagikan via WhatsApp"
+                          disabled={uploadingId === payment.id}
+                        >
+                          <WhatsappIcon style={{ width: 18, height: 18 }} />
+                          {uploadingId === payment.id ? '...' : ''}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openEditDialog(payment)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Hapus Pembayaran</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Apakah Anda yakin ingin menghapus pembayaran ini? 
+                                Tindakan ini tidak dapat dibatalkan.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Batal</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(payment.id)}>
+                                Hapus
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
             </TableBody>
           </Table>
         </CardContent>
