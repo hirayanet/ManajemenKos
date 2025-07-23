@@ -205,7 +205,11 @@ export default function Payments() {
         // Optionally update payment record with receipt_url
         await supabase.from('payments').update({ receipt_url: url }).eq('id', payment.id);
         // Open WhatsApp share
-        const text = encodeURIComponent(`Berikut kwitansi pembayaran kos: ${url}`);
+        // Ambil bulan dan tahun dari payment_date
+        const dateObj = new Date(payment.payment_date);
+        const bulan = dateObj.toLocaleString('id-ID', { month: 'long' });
+        const tahun = dateObj.getFullYear();
+        const text = encodeURIComponent(`Berikut kwitansi pembayaran kos bulan ${bulan} ${tahun}: ${url}`);
         window.open(`https://wa.me/?text=${text}`, '_blank');
       } else {
         toast({ title: 'Gagal upload PDF', description: 'Terjadi masalah saat upload kwitansi', variant: 'destructive' });
