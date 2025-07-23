@@ -11,6 +11,12 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { PlusCircle, Edit, Trash2, Download, Receipt } from "lucide-react";
 import { WhatsappIcon } from '@/components/ui/WhatsappIcon';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem
+} from '@/components/ui/dropdown-menu';
 import { uploadPDFtoSupabase } from '../lib/supabaseUpload';
 import { jsPDFToBlob } from '../lib/pdfUtils';
 import { format } from "date-fns";
@@ -184,7 +190,8 @@ export default function Payments() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
 
-  const handleShareWhatsapp = async (payment: Payment) => {
+  // Fungsi share kwitansi multi-platform
+  const handleShareKwitansi = async (payment: Payment) => {
     setUploadingId(payment.id);
     setShareUrl(null);
     try {
@@ -202,15 +209,33 @@ export default function Payments() {
       const url = await uploadPDFtoSupabase(blob, fileName);
       if (url) {
         setShareUrl(url);
-        // Optionally update payment record with receipt_url
         await supabase.from('payments').update({ receipt_url: url }).eq('id', payment.id);
-        // Open WhatsApp share
-        // Ambil bulan dan tahun dari payment_date
         const dateObj = new Date(payment.payment_date);
         const bulan = dateObj.toLocaleString('id-ID', { month: 'long' });
         const tahun = dateObj.getFullYear();
-        const text = encodeURIComponent(`Berikut kwitansi pembayaran kos bulan ${bulan} ${tahun}: ${url}`);
-        window.open(`https://wa.me/?text=${text}`, '_blank');
+        const shareText = `Berikut kwitansi pembayaran kos bulan ${bulan} ${tahun}: ${url}`;
+        if (navigator.share) {
+          try {
+            await navigator.share({
+              title: 'Kwitansi Pembayaran',
+              text: shareText,
+              url
+            });
+          } catch (err) {
+            // User cancelled share or error
+          }
+        } else {
+          // Fallback: tampilkan pilihan share manual
+          const wa = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+          const tg = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(shareText)}`;
+          const mail = `mailto:?subject=Kwitansi Pembayaran&body=${encodeURIComponent(shareText)}`;
+          // Bisa juga tampilkan modal custom, di sini pakai prompt sederhana
+          const fallback = window.prompt('Copy link kwitansi dan bagikan ke aplikasi lain:', url);
+          if (fallback) {
+            // User menyalin link
+          }
+          // Atau bisa window.open(wa/tg/mail) jika ingin otomatis
+        }
       } else {
         toast({ title: 'Gagal upload PDF', description: 'Terjadi masalah saat upload kwitansi', variant: 'destructive' });
       }
@@ -468,31 +493,25 @@ export default function Payments() {
                     <TableCell>{payment.payment_method}</TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => generateReceiptPDF(payment)}
-                          title="Download Kwitansi"
-                        >
-                          <Receipt className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleShareWhatsapp(payment)}
-                          title="Bagikan via WhatsApp"
-                          disabled={uploadingId === payment.id}
-                        >
-                          <WhatsappIcon style={{ width: 18, height: 18 }} />
-                          {uploadingId === payment.id ? '...' : ''}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openEditDialog(payment)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" title="Aksi Kwitansi">
+                              <Receipt className="h-4 w-4 mr-1" /> Kwitansi
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => generateReceiptPDF(payment)}>
+                              <Receipt className="h-4 w-4 mr-2" /> Download Kwitansi
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleShareKwitansi(payment)}
+                              disabled={uploadingId === payment.id}
+                            >
+                              <span className="mr-2">🔗</span> Share Link Kwitansi
+                              {uploadingId === payment.id ? '...' : ''}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="outline" size="sm">
