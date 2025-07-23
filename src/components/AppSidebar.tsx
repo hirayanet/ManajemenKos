@@ -22,8 +22,9 @@ const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
   { title: "Data Penghuni", url: "/residents", icon: Users },
   { title: "Pembayaran", url: "/payments", icon: CreditCard },
+  { title: "Pengeluaran", url: "/expenses", icon: FileText },
   { title: "Laporan", url: "/reports", icon: FileText },
-  { title: "Riwayat Penghuni", url: "/resident-history", icon: History }, // Tambahkan menu Riwayat Penghuni ke menu utama
+  { title: "Riwayat Penghuni", url: "/resident-history", icon: History },
 ];
 
 export function AppSidebar() {

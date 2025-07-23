@@ -74,6 +74,24 @@ export default function Payments() {
 
   const fetchPayments = async () => {
     try {
+      setPayments([]);
+      // Ambil tanggal hari ini
+      const today = new Date();
+      // Jika tanggal 1 jam 00:00-00:01, reset tampilan (tidak ada data)
+      if (
+        today.getDate() === 1 &&
+        today.getHours() === 0 &&
+        today.getMinutes() <= 1
+      ) {
+        return;
+      }
+      // Hitung awal dan akhir bulan berjalan
+      const month = today.getMonth() + 1;
+      const year = today.getFullYear();
+      const startDate = `${year}-${month.toString().padStart(2, "0")}-01`;
+      // Akhir bulan = tanggal 1 bulan berikutnya - 1 hari
+      const endDateObj = new Date(year, month, 0);
+      const endDate = `${year}-${month.toString().padStart(2, "0")}-${endDateObj.getDate().toString().padStart(2, "0")}`;
       const { data, error } = await supabase
         .from("payments")
         .select(`
@@ -83,6 +101,8 @@ export default function Payments() {
             rooms (room_number)
           )
         `)
+        .gte("payment_date", startDate)
+        .lte("payment_date", endDate)
         .order("created_at", { ascending: false });
 
       if (error) throw error;

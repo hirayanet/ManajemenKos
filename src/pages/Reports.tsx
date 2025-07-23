@@ -25,6 +25,8 @@ interface OccupancyData {
 
 export default function Reports() {
   const [monthlyData, setMonthlyData] = useState<MonthlyReport[]>([]);
+  const [monthlyExpenses, setMonthlyExpenses] = useState<number[]>(Array(12).fill(0));
+  const [totalExpenses, setTotalExpenses] = useState(0);
   const [occupancyData, setOccupancyData] = useState<OccupancyData[]>([]);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [totalIncome, setTotalIncome] = useState(0);
@@ -49,6 +51,7 @@ export default function Reports() {
     try {
       await Promise.all([
         fetchMonthlyIncome(),
+        fetchMonthlyExpenses(),
         fetchOccupancyData(),
         fetchSummaryStats(),
       ]);
@@ -83,6 +86,24 @@ export default function Reports() {
 
     setMonthlyData(monthlyIncome);
     setTotalIncome(monthlyIncome.reduce((sum, m) => sum + m.income, 0));
+  };
+
+  // Fetch monthly expenses for each month in selected year
+  const fetchMonthlyExpenses = async () => {
+    const { data, error } = await supabase
+      .from("expenses")
+      .select("expense_date, amount")
+      .gte("expense_date", `${selectedYear}-01-01`)
+      .lt("expense_date", `${parseInt(selectedYear) + 1}-01-01`);
+    if (error) throw error;
+    const expensesByMonth = Array(12).fill(0);
+    data?.forEach(exp => {
+      const date = new Date(exp.expense_date);
+      const monthIdx = date.getMonth(); // 0-based
+      expensesByMonth[monthIdx] += exp.amount;
+    });
+    setMonthlyExpenses(expensesByMonth);
+    setTotalExpenses(expensesByMonth.reduce((sum, val) => sum + val, 0));
   };
 
   const fetchOccupancyData = async () => {
@@ -130,17 +151,18 @@ export default function Reports() {
     doc.setFontSize(12);
     doc.text("RINGKASAN:", 20, 70);
     doc.text(`Total Pendapatan: Rp ${totalIncome.toLocaleString("id-ID")}`, 20, 85);
-    doc.text(`Total Penghuni Aktif: ${totalResidents} orang`, 20, 100);
-    doc.text(`Tingkat Hunian: ${occupancyRate.toFixed(1)}%`, 20, 115);
+    doc.text(`Total Pengeluaran: Rp ${totalExpenses.toLocaleString("id-ID")}`, 20, 100);
+    doc.text(`Total Penghuni Aktif: ${totalResidents} orang`, 20, 115);
+    doc.text(`Tingkat Hunian: ${occupancyRate.toFixed(1)}%`, 20, 130);
     
     // Monthly Data Table
-    doc.text("PENDAPATAN PER BULAN:", 20, 140);
+    doc.text("PENDAPATAN & PENGELUARAN PER BULAN:", 20, 155);
     
-    let yPos = 155;
+    let yPos = 170;
     monthlyData.forEach((month, index) => {
       if (month.income > 0) {
         doc.text(
-          `${month.month}: Rp ${month.income.toLocaleString("id-ID")} (${month.payments} pembayaran)`,
+          `${month.month}: Rp ${month.income.toLocaleString("id-ID")} (${month.payments} pembayaran) - Pengeluaran: Rp ${monthlyExpenses[index].toLocaleString("id-ID")}`,
           20,
           yPos
         );
@@ -189,7 +211,17 @@ export default function Reports() {
             </div>
           </CardContent>
         </Card>
-
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center">
+              <DollarSign className="h-8 w-8 text-red-500" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-muted-foreground">Total Pengeluaran</p>
+                <p className="text-2xl font-bold">Rp {totalExpenses.toLocaleString("id-ID")}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
@@ -201,7 +233,6 @@ export default function Reports() {
             </div>
           </CardContent>
         </Card>
-
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
@@ -213,15 +244,27 @@ export default function Reports() {
             </div>
           </CardContent>
         </Card>
-
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
               <TrendingUp className="h-8 w-8 text-primary" />
               <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Rata-rata Bulanan</p>
+                <p className="text-sm font-medium text-muted-foreground">Rata-rata Pendapatan</p>
                 <p className="text-2xl font-bold">
                   Rp {Math.round(totalIncome / 12).toLocaleString("id-ID")}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center">
+              <TrendingUp className="h-8 w-8 text-red-500" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-muted-foreground">Rata-rata Pengeluaran</p>
+                <p className="text-2xl font-bold">
+                  Rp {Math.round(totalExpenses / 12).toLocaleString("id-ID")}
                 </p>
               </div>
             </div>
@@ -251,6 +294,30 @@ export default function Reports() {
                   formatter={(value: number) => [`Rp ${value.toLocaleString("id-ID")}`, "Pendapatan"]}
                 />
                 <Bar dataKey="income" fill="hsl(var(--primary))" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Pengeluaran Bulanan {selectedYear}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={months.map((month, idx) => ({ month, expense: monthlyExpenses[idx] }))}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey="month" 
+                  angle={-45}
+                  textAnchor="end"
+                  height={60}
+                  interval={0}
+                />
+                <YAxis tickFormatter={(value) => `${value / 1000}K`} />
+                <Tooltip 
+                  formatter={(value: number) => [`Rp ${value.toLocaleString("id-ID")}`, "Pengeluaran"]}
+                />
+                <Bar dataKey="expense" fill="#ef4444" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -287,7 +354,7 @@ export default function Reports() {
       {/* Monthly Data Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Detail Pendapatan per Bulan</CardTitle>
+          <CardTitle>Detail Pendapatan & Pengeluaran per Bulan</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -296,15 +363,17 @@ export default function Reports() {
                 <TableHead>Bulan</TableHead>
                 <TableHead>Jumlah Pembayaran</TableHead>
                 <TableHead>Total Pendapatan</TableHead>
+                <TableHead>Total Pengeluaran</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {monthlyData.map((month) => (
+              {monthlyData.map((month, idx) => (
                 <TableRow key={month.month}>
                   <TableCell className="font-medium">{month.month}</TableCell>
                   <TableCell>{month.payments}</TableCell>
                   <TableCell>Rp {month.income.toLocaleString("id-ID")}</TableCell>
+                  <TableCell>Rp {monthlyExpenses[idx].toLocaleString("id-ID")}</TableCell>
                   <TableCell>
                     <Badge variant={month.income > 0 ? "default" : "secondary"}>
                       {month.income > 0 ? "Ada Pendapatan" : "Tidak Ada"}

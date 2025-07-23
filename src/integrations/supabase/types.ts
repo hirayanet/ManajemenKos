@@ -82,6 +82,36 @@ export type Database = {
           },
         ]
       }
+      expenses: {
+        Row: {
+          id: string;
+          category: string;
+          amount: number;
+          expense_date: string;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          category: string;
+          amount: number;
+          expense_date: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          category?: string;
+          amount?: number;
+          expense_date?: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       residents: {
         Row: {
           created_at: string

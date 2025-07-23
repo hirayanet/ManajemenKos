@@ -11,6 +11,7 @@ import NotFound from "./pages/NotFound";
 import Residents from "./pages/Residents";
 import Payments from "./pages/Payments";
 import Reports from "./pages/Reports";
+import Expenses from "./pages/Expenses";
 import AuthGuard from "./components/AuthGuard";
 // Import halaman ResidentHistory
 import ResidentHistory from "./pages/ResidentHistory";
@@ -44,6 +45,13 @@ const App = () => (
             <AuthGuard>
               <Layout>
                 <Payments />
+              </Layout>
+            </AuthGuard>
+          } />
+          <Route path="/expenses" element={
+            <AuthGuard>
+              <Layout>
+                <Expenses />
               </Layout>
             </AuthGuard>
           } />

@@ -10,6 +10,8 @@ interface DashboardStats {
   occupiedRooms: number;
   totalResidents: number;
   monthlyPayments: number;
+  monthlyExpenses: number;
+  monthlyProfit: number;
 }
 
 const Dashboard = () => {
@@ -18,6 +20,8 @@ const Dashboard = () => {
     occupiedRooms: 0,
     totalResidents: 0,
     monthlyPayments: 0,
+    monthlyExpenses: 0,
+    monthlyProfit: 0,
   });
   const [recentResidents, setRecentResidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,17 +72,29 @@ const Dashboard = () => {
           .eq("payment_month", currentMonthName)
           .filter('payment_date', 'gte', `${currentYear}-01-01`);
 
+        // Get current month expenses
+        const firstDay = new Date(currentYear, currentMonth, 1);
+        const lastDay = new Date(currentYear, currentMonth + 1, 0);
+        const { data: expensesData } = await supabase
+          .from("expenses")
+          .select("amount, expense_date")
+          .gte("expense_date", firstDay.toISOString().slice(0, 10))
+          .lte("expense_date", lastDay.toISOString().slice(0, 10));
+        const monthlyExpenses = expensesData?.reduce((sum, e) => sum + Number(e.amount), 0) || 0;
         // Calculate stats
         const totalRooms = rooms?.length || 0;
         const occupiedRooms = rooms?.filter(room => room.is_occupied).length || 0;
         const totalResidents = residents?.length || 0;
         const monthlyPayments = payments?.reduce((sum, payment) => sum + Number(payment.amount), 0) || 0;
+        const monthlyProfit = monthlyPayments - monthlyExpenses;
 
         setStats({
           totalRooms,
           occupiedRooms,
           totalResidents,
           monthlyPayments,
+          monthlyExpenses,
+          monthlyProfit,
         });
 
         // Get recent residents (last 5)
@@ -123,7 +139,7 @@ const Dashboard = () => {
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Kamar</CardTitle>
@@ -145,7 +161,7 @@ const Dashboard = () => {
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalResidents}</div>
             <p className="text-xs text-muted-foreground">
-              {((stats.occupiedRooms / stats.totalRooms) * 100).toFixed(1)}% tingkat hunian
+              {stats.totalRooms ? ((stats.occupiedRooms / stats.totalRooms) * 100).toFixed(1) : 0}% tingkat hunian
             </p>
           </CardContent>
         </Card>
@@ -174,6 +190,36 @@ const Dashboard = () => {
             </div>
             <p className="text-xs text-muted-foreground">
               Pembayaran bulan {new Date().toLocaleDateString("id-ID", { month: "long", year: "numeric" })}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pengeluaran Bulan Ini</CardTitle>
+            <CreditCard className="h-4 w-4 text-red-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">
+              Rp {stats.monthlyExpenses.toLocaleString("id-ID")}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Pengeluaran bulan {new Date().toLocaleDateString("id-ID", { month: "long", year: "numeric" })}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Laba/Rugi Bulan Ini</CardTitle>
+            <CreditCard className={"h-4 w-4 " + (stats.monthlyProfit >= 0 ? "text-green-600" : "text-red-600")} />
+          </CardHeader>
+          <CardContent>
+            <div className={"text-2xl font-bold " + (stats.monthlyProfit >= 0 ? "text-green-600" : "text-red-600")}> 
+              Rp {stats.monthlyProfit.toLocaleString("id-ID")}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Selisih pemasukan - pengeluaran bulan ini
             </p>
           </CardContent>
         </Card>
