@@ -36,7 +36,7 @@ export function generateKwitansiPDF({
 
   // Header
   doc.setFontSize(18);
-  doc.text('BUKTI PEMBAYARAN KOS', 105, 22, { align: 'center' });
+  doc.text('BUKTI PEMBAYARAN KOST', 105, 22, { align: 'center' });
 
   // Alamat dan kontak
   doc.setFontSize(10);
@@ -84,9 +84,33 @@ export function generateKwitansiPDF({
     styles: { halign: 'center' },
   });
 
+  // Stempel bulat di atas garis tanda tangan
+  const stampX = 170; // kanan bawah, dekat tanda tangan
+  const stampY = 100; // tepat di atas garis tanda tangan
+
+  // Gambar lingkaran biru
+  doc.setDrawColor(0, 102, 204); // Biru
+  doc.setLineWidth(1.2);
+  doc.circle(stampX + 15, stampY + 15, 15, 'S'); // x, y, radius, style
+
+  // Tulisan 'LUNAS' warna biru
+  doc.setFontSize(12);
+  doc.setTextColor(0, 102, 204);
+  doc.setFont('helvetica', 'bold');
+  doc.text('LUNAS', stampX + 15, stampY + 13, { align: 'center' });
+
+  // Tulisan 'Hiraya Kost' warna merah di bawahnya
+  doc.setFontSize(10);
+  doc.setTextColor(200, 0, 0);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Hiraya Kost', stampX + 15, stampY + 22, { align: 'center' });
+
+  // Kembalikan warna ke hitam untuk konten lain
+  doc.setTextColor(0, 0, 0);
+
   // Tanda tangan
-  doc.text('Pengelola Kos', 160, 110);
-  doc.text('_____________________', 150, 120);
+  doc.text('Pengelola Kost', 160, 110);
+  doc.text('_____________________', 150, 128);
 
   return doc;
 }
