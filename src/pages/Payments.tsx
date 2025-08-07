@@ -28,6 +28,7 @@ interface Resident {
   id: string;
   full_name: string;
   rooms: { room_number: number };
+  entry_date: string; // tanggal masuk penghuni
 }
 
 interface Payment {
@@ -42,6 +43,7 @@ interface Payment {
   residents: {
     full_name: string;
     rooms: { room_number: number };
+    entry_date: string; // tanggal masuk penghuni
   };
 }
 
@@ -104,7 +106,8 @@ export default function Payments() {
           *,
           residents (
             full_name,
-            rooms (room_number)
+            rooms (room_number),
+            entry_date
           )
         `)
         .gte("payment_date", startDate)
@@ -152,7 +155,8 @@ export default function Payments() {
         .select(`
           id,
           full_name,
-          rooms (room_number)
+          rooms (room_number),
+          entry_date
         `)
         .eq("is_active", true)
         .order("full_name");
@@ -176,7 +180,7 @@ export default function Payments() {
   const generateReceiptPDF = (payment: Payment) => {
     const doc = generateKwitansiPDF({
       namaPenyewa: payment.residents.full_name,
-      tanggalMasuk: payment.payment_date, // gunakan payment_date sebagai tanggal masuk (atau ganti dengan field yang benar jika ada)
+      tanggalMasuk: payment.residents.entry_date, // gunakan entry_date sebagai tanggal masuk penghuni
       nominal: `Rp ${payment.amount.toLocaleString('id-ID')}`,
       tanggal: payment.payment_date,
       logoBase64: logoImg,
@@ -197,7 +201,7 @@ export default function Payments() {
     try {
       const doc = generateKwitansiPDF({
         namaPenyewa: payment.residents.full_name,
-        tanggalMasuk: payment.payment_date,
+        tanggalMasuk: payment.residents.entry_date, // gunakan entry_date sebagai tanggal masuk penghuni
         nominal: `Rp ${payment.amount.toLocaleString('id-ID')}`,
         tanggal: payment.payment_date,
         logoBase64: logoImg,

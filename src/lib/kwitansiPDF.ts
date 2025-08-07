@@ -59,15 +59,12 @@ export function generateKwitansiPDF({
     ) {
       throw new Error('Tanggal tidak valid');
     }
-    // Tanggal mulai = tanggal masuk, tapi di bulan pembayaran
+    // Periode selalu berdasarkan tanggal masuk sebagai acuan
+    // Tanggal mulai = tanggal masuk di bulan pembayaran
     const mulai = new Date(bayar.getFullYear(), bayar.getMonth(), masuk.getDate());
-    // Jika pembayaran dilakukan sebelum tanggal masuk di bulan berjalan, ambil bulan sebelumnya
-    if (bayar.getDate() < masuk.getDate()) {
-      mulai.setMonth(mulai.getMonth() - 1);
-    }
-    const akhir = new Date(mulai);
-    akhir.setMonth(akhir.getMonth() + 1);
-    // Format tanggal: 1 Februari 2025
+    // Tanggal akhir = tanggal masuk di bulan berikutnya
+    const akhir = new Date(bayar.getFullYear(), bayar.getMonth() + 1, masuk.getDate());
+    // Format tanggal: 5 Agustus 2025
     const formatTanggal = (tgl: Date) => tgl.getDate() + ' ' + tgl.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
     periodeSewa = `${formatTanggal(mulai)} - ${formatTanggal(akhir)}`;
   } catch (e) {
