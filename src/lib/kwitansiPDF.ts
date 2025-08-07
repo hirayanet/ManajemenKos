@@ -26,7 +26,7 @@ export function generateKwitansiPDF({
   logoBase64: string;
   kamar: string;
   metodePembayaran: string;
-}) {
+}): { doc: jsPDF, periodeSewa: string } {
   const doc = new jsPDF();
 
   // Logo
@@ -109,5 +109,5 @@ export function generateKwitansiPDF({
   doc.text('Pengelola Kost', 160, 110);
   doc.text('_____________________', 150, 128);
 
-  return doc;
+  return { doc, periodeSewa };
 }

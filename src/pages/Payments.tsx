@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -52,45 +52,6 @@ export default function Payments() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareModal, setShareModal] = useState<{ url: string; text: string } | null>(null);
-  // State utama
-  // Sudah dideklarasikan di atas, hapus duplikat di bawah ini
-
-
-  // Fungsi share kwitansi multi-platform
-  const handleShareKwitansi = async (payment: Payment) => {
-    setUploadingId(payment.id);
-    setShareUrl(null);
-    setShareModal(null);
-    try {
-      const doc = generateKwitansiPDF({
-        namaPenyewa: payment.residents.full_name,
-        tanggalMasuk: payment.payment_date,
-        nominal: `Rp ${payment.amount.toLocaleString('id-ID')}`,
-        tanggal: payment.payment_date,
-        logoBase64: logoImg,
-        kamar: payment.residents.rooms?.room_number ? `Kamar ${payment.residents.rooms.room_number}` : '',
-        metodePembayaran: payment.payment_method,
-      });
-      const blob = await jsPDFToBlob(doc);
-      const fileName = `kwitansi-${payment.residents.full_name.replace(/\s+/g, "_")}-${payment.payment_date}.pdf`;
-      const url = await uploadPDFtoSupabase(blob, fileName);
-      if (url) {
-        setShareUrl(url);
-        await supabase.from('payments').update({ receipt_url: url }).eq('id', payment.id);
-        const dateObj = new Date(payment.payment_date);
-        const bulan = dateObj.toLocaleString('id-ID', { month: 'long' });
-        const tahun = dateObj.getFullYear();
-        const shareText = `Berikut kwitansi pembayaran kos bulan ${bulan} ${tahun}: ${url}`;
-        setShareModal({ url, text: shareText });
-      } else {
-        toast({ title: 'Gagal upload PDF', description: 'Terjadi masalah saat upload kwitansi', variant: 'destructive' });
-      }
-    } catch (err) {
-      toast({ title: 'Error', description: 'Gagal membuat atau upload kwitansi', variant: 'destructive' });
-    } finally {
-      setUploadingId(null);
-    }
-  };
 
   const [payments, setPayments] = useState<Payment[]>([]);
   const [residents, setResidents] = useState<Resident[]>([]);
@@ -222,7 +183,7 @@ export default function Payments() {
 
   // Generate and download PDF
   const generateReceiptPDF = (payment: Payment) => {
-    const doc = generateKwitansiPDF({
+    const { doc } = generateKwitansiPDF({
       namaPenyewa: payment.residents.full_name,
       tanggalMasuk: payment.residents.entry_date, // gunakan entry_date sebagai tanggal masuk penghuni
       nominal: `Rp ${payment.amount.toLocaleString('id-ID')}`,
@@ -240,7 +201,12 @@ export default function Payments() {
     setUploadingId(payment.id);
     setShareUrl(null);
     try {
-      const doc = generateKwitansiPDF({
+      // Logging data yang akan digunakan
+      console.log('Generate kwitansi untuk:', payment);
+      if (!payment.residents.full_name || !payment.residents.entry_date || !payment.amount || !payment.payment_date) {
+        throw new Error('Data pembayaran/resident tidak lengkap!');
+      }
+      const { doc, periodeSewa } = generateKwitansiPDF({
         namaPenyewa: payment.residents.full_name,
         tanggalMasuk: payment.residents.entry_date, // gunakan entry_date sebagai tanggal masuk penghuni
         nominal: `Rp ${payment.amount.toLocaleString('id-ID')}`,
@@ -249,47 +215,34 @@ export default function Payments() {
         kamar: payment.residents.rooms?.room_number ? `Kamar ${payment.residents.rooms.room_number}` : '',
         metodePembayaran: payment.payment_method,
       });
+      if (!doc) {
+        throw new Error('Gagal generate dokumen PDF');
+      }
       const blob = await jsPDFToBlob(doc);
+      if (!blob) {
+        throw new Error('Gagal konversi PDF ke blob');
+      }
       const fileName = `kwitansi-${payment.residents.full_name.replace(/\s+/g, "_")}-${payment.payment_date}.pdf`;
       const url = await uploadPDFtoSupabase(blob, fileName);
       if (url) {
         setShareUrl(url);
         await supabase.from('payments').update({ receipt_url: url }).eq('id', payment.id);
-        const dateObj = new Date(payment.payment_date);
-        const bulan = dateObj.toLocaleString('id-ID', { month: 'long' });
-        const tahun = dateObj.getFullYear();
-        const shareText = `Berikut kwitansi pembayaran kos bulan ${bulan} ${tahun}: ${url}`;
-        if (navigator.share) {
-          try {
-            await navigator.share({
-              title: 'Kwitansi Pembayaran',
-              text: shareText,
-              url
-            });
-          } catch (err) {
-            // User cancelled share or error
-          }
-        } else {
-          // Fallback: tampilkan pilihan share manuall
-          const wa = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
-          const tg = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(shareText)}`;
-          const mail = `mailto:?subject=Kwitansi Pembayaran&body=${encodeURIComponent(shareText)}`;
-          // Bisa juga tampilkan modal custom, di sini pakai prompt sederhana
-          const fallback = window.prompt('Copy link kwitansi dan bagikan ke aplikasi lain:', url);
-          if (fallback) {
-            // User menyalin link
-          }
-          // Atau bisa window.open(wa/tg/mail) jika ingin otomatis
-        }
+        // Template share sesuai permintaan user
+        const shareText = `Berikut kwitansi pembayaran sewa kos untuk periode: ${periodeSewa}\n\nNama: ${payment.residents.full_name}\nKamar: ${payment.residents.rooms?.room_number || "-"}\nNominal: Rp ${payment.amount.toLocaleString('id-ID')}\nMetode Pembayaran: ${payment.payment_method}\nTanggal Bayar: ${format(new Date(payment.payment_date), 'dd MMMM yyyy', { locale: undefined })}\n\nSilakan unduh kwitansi pada link berikut: ${url}\n\nTerima kasih telah melakukan pembayaran tepat waktu.\nSalam,\nPengelola Kos`;
+        setShareModal({ url, text: shareText }); // Tampilkan modal share, gesture share dilakukan dari tombol modal
       } else {
+        console.error('Upload PDF ke Supabase gagal');
         toast({ title: 'Gagal upload PDF', description: 'Terjadi masalah saat upload kwitansi', variant: 'destructive' });
       }
-    } catch (err) {
-      toast({ title: 'Error', description: 'Gagal membuat atau upload kwitansi', variant: 'destructive' });
+    } catch (err: any) {
+      console.error('Error handleShareKwitansi:', err);
+      toast({ title: 'Error', description: err?.message || 'Gagal membuat atau upload kwitansi', variant: 'destructive' });
     } finally {
       setUploadingId(null);
     }
   };
+
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -357,6 +310,7 @@ export default function Payments() {
         description: "Pembayaran berhasil dihapus",
       });
       fetchPayments();
+      fetchResidents();
     } catch (error) {
       toast({
         title: "Error",
@@ -410,6 +364,9 @@ export default function Payments() {
               <DialogTitle>
                 {selectedPayment ? "Edit Pembayaran" : "Tambah Pembayaran Baru"}
               </DialogTitle>
+              <DialogDescription>
+                Silakan lengkapi data pembayaran kos di bawah ini. Semua kolom wajib diisi.
+              </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -601,8 +558,21 @@ export default function Payments() {
               <a className="block w-full text-center bg-blue-400 text-white rounded p-2" href={`https://t.me/share/url?url=${encodeURIComponent(shareModal.url)}&text=${encodeURIComponent(shareModal.text)}`} target="_blank" rel="noopener noreferrer">Telegram</a>
               <a className="block w-full text-center bg-gray-700 text-white rounded p-2" href={`mailto:?subject=Kwitansi Pembayaran&body=${encodeURIComponent(shareModal.text)}`}>Email</a>
               <button className="block w-full text-center bg-gray-200 rounded p-2 text-gray-700" onClick={() => {navigator.clipboard.writeText(shareModal.url); toast({title: 'Link disalin', description: 'Link kwitansi berhasil disalin ke clipboard'});}}>Copy Link</button>
+              {typeof navigator !== 'undefined' && navigator.share && (
+                <button
+                  className="block w-full text-center bg-blue-600 text-white rounded p-2 mb-2"
+                  onClick={() => {
+                    navigator.share({
+                      title: 'Kwitansi Pembayaran',
+                      text: shareModal.text
+                    });
+                  }}
+                >
+                  Share via Native Share
+                </button>
+              )}
+              <button className="mt-4 w-full text-center bg-red-500 text-white rounded p-2" onClick={() => setShareModal(null)}>Tutup</button>
             </div>
-            <button className="mt-4 w-full text-center bg-red-500 text-white rounded p-2" onClick={() => setShareModal(null)}>Tutup</button>
           </div>
         </div>
       )}
