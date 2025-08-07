@@ -58,7 +58,7 @@ export function AppSidebar() {
               <Home className="h-6 w-6 text-sidebar-accent-foreground" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-sidebar-foreground">Kos Manager</h2>
+              <h2 className="text-lg font-bold text-sidebar-foreground">Ruang Admin</h2>
               <p className="text-sm text-sidebar-foreground/70">Admin Panel</p>
             </div>
           </div>

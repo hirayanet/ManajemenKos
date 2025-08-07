@@ -48,6 +48,50 @@ interface Payment {
 }
 
 export default function Payments() {
+  // State utama
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareModal, setShareModal] = useState<{ url: string; text: string } | null>(null);
+  // State utama
+  // Sudah dideklarasikan di atas, hapus duplikat di bawah ini
+
+
+  // Fungsi share kwitansi multi-platform
+  const handleShareKwitansi = async (payment: Payment) => {
+    setUploadingId(payment.id);
+    setShareUrl(null);
+    setShareModal(null);
+    try {
+      const doc = generateKwitansiPDF({
+        namaPenyewa: payment.residents.full_name,
+        tanggalMasuk: payment.payment_date,
+        nominal: `Rp ${payment.amount.toLocaleString('id-ID')}`,
+        tanggal: payment.payment_date,
+        logoBase64: logoImg,
+        kamar: payment.residents.rooms?.room_number ? `Kamar ${payment.residents.rooms.room_number}` : '',
+        metodePembayaran: payment.payment_method,
+      });
+      const blob = await jsPDFToBlob(doc);
+      const fileName = `kwitansi-${payment.residents.full_name.replace(/\s+/g, "_")}-${payment.payment_date}.pdf`;
+      const url = await uploadPDFtoSupabase(blob, fileName);
+      if (url) {
+        setShareUrl(url);
+        await supabase.from('payments').update({ receipt_url: url }).eq('id', payment.id);
+        const dateObj = new Date(payment.payment_date);
+        const bulan = dateObj.toLocaleString('id-ID', { month: 'long' });
+        const tahun = dateObj.getFullYear();
+        const shareText = `Berikut kwitansi pembayaran kos bulan ${bulan} ${tahun}: ${url}`;
+        setShareModal({ url, text: shareText });
+      } else {
+        toast({ title: 'Gagal upload PDF', description: 'Terjadi masalah saat upload kwitansi', variant: 'destructive' });
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Gagal membuat atau upload kwitansi', variant: 'destructive' });
+    } finally {
+      setUploadingId(null);
+    }
+  };
+
   const [payments, setPayments] = useState<Payment[]>([]);
   const [residents, setResidents] = useState<Resident[]>([]);
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
@@ -190,9 +234,6 @@ export default function Payments() {
     doc.save(`kwitansi-${payment.residents.full_name}-${payment.payment_date}.pdf`);
   };
 
-  // Generate, upload PDF, and get shareable link
-  const [uploadingId, setUploadingId] = useState<string | null>(null);
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
 
   // Fungsi share kwitansi multi-platform
   const handleShareKwitansi = async (payment: Payment) => {
@@ -229,7 +270,7 @@ export default function Payments() {
             // User cancelled share or error
           }
         } else {
-          // Fallback: tampilkan pilihan share manual
+          // Fallback: tampilkan pilihan share manuall
           const wa = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
           const tg = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(shareText)}`;
           const mail = `mailto:?subject=Kwitansi Pembayaran&body=${encodeURIComponent(shareText)}`;
@@ -489,8 +530,8 @@ export default function Payments() {
                 .sort((a, b) => (a.residents.rooms.room_number || 0) - (b.residents.rooms.room_number || 0))
                 .map((payment) => (
                   <TableRow key={payment.id}>
-                    <TableCell className="font-medium">{payment.residents.full_name}</TableCell>
-                    <TableCell>Kamar {payment.residents.rooms.room_number}</TableCell>
+                    <TableCell className="font-medium">{payment.residents?.full_name || "-"}</TableCell>
+                    <TableCell>Kamar {payment.residents?.rooms?.room_number || "-"}</TableCell>
                     <TableCell>{payment.payment_month}</TableCell>
                     <TableCell>{format(new Date(payment.payment_date), "dd/MM/yyyy")}</TableCell>
                     <TableCell>Rp {payment.amount.toLocaleString("id-ID")}</TableCell>
@@ -498,24 +539,28 @@ export default function Payments() {
                     <TableCell>
                       <div className="flex space-x-2">
                         <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" title="Aksi Kwitansi">
-                              <Receipt className="h-4 w-4 mr-1" /> Kwitansi
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => generateReceiptPDF(payment)}>
-                              <Receipt className="h-4 w-4 mr-2" /> Download Kwitansi
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleShareKwitansi(payment)}
-                              disabled={uploadingId === payment.id}
-                            >
-                              <span className="mr-2">🔗</span> Share Link Kwitansi
-                              {uploadingId === payment.id ? '...' : ''}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button variant="outline" size="sm" title="Aksi Kwitansi">
+      <Receipt className="h-4 w-4 mr-1" /> Kwitansi
+    </Button>
+  </DropdownMenuTrigger>
+  <DropdownMenuContent align="end">
+    <DropdownMenuItem onClick={() => generateReceiptPDF(payment)}>
+      <Receipt className="h-4 w-4 mr-2" /> Download Kwitansi
+    </DropdownMenuItem>
+    <DropdownMenuItem
+      onClick={() => handleShareKwitansi(payment)}
+      disabled={uploadingId === payment.id}
+    >
+      <span className="mr-2">🔗</span>
+      {uploadingId === payment.id ? (
+        <span className="flex items-center"><span className="animate-spin mr-2 h-4 w-4 border-2 border-blue-400 border-t-transparent rounded-full"></span> Uploading...</span>
+      ) : (
+        <>Share Link Kwitansi</>
+      )}
+    </DropdownMenuItem>
+  </DropdownMenuContent>
+</DropdownMenu>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="outline" size="sm">
@@ -546,6 +591,21 @@ export default function Payments() {
           </Table>
         </CardContent>
       </Card>
+      {/* Modal Pilihan Media Share */}
+      {shareModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-xs w-full">
+            <div className="font-bold mb-2">Bagikan Kwitansi</div>
+            <div className="space-y-2">
+              <a className="block w-full text-center bg-green-500 text-white rounded p-2" href={`https://wa.me/?text=${encodeURIComponent(shareModal.text)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a>
+              <a className="block w-full text-center bg-blue-400 text-white rounded p-2" href={`https://t.me/share/url?url=${encodeURIComponent(shareModal.url)}&text=${encodeURIComponent(shareModal.text)}`} target="_blank" rel="noopener noreferrer">Telegram</a>
+              <a className="block w-full text-center bg-gray-700 text-white rounded p-2" href={`mailto:?subject=Kwitansi Pembayaran&body=${encodeURIComponent(shareModal.text)}`}>Email</a>
+              <button className="block w-full text-center bg-gray-200 rounded p-2 text-gray-700" onClick={() => {navigator.clipboard.writeText(shareModal.url); toast({title: 'Link disalin', description: 'Link kwitansi berhasil disalin ke clipboard'});}}>Copy Link</button>
+            </div>
+            <button className="mt-4 w-full text-center bg-red-500 text-white rounded p-2" onClick={() => setShareModal(null)}>Tutup</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
