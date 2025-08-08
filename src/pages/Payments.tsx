@@ -228,7 +228,7 @@ export default function Payments() {
         setShareUrl(url);
         await supabase.from('payments').update({ receipt_url: url }).eq('id', payment.id);
         // Template share sesuai permintaan user
-        const shareText = `Berikut kwitansi pembayaran sewa kos untuk periode: ${periodeSewa}\n\nNama: ${payment.residents.full_name}\nKamar: ${payment.residents.rooms?.room_number || "-"}\nNominal: Rp ${payment.amount.toLocaleString('id-ID')}\nMetode Pembayaran: ${payment.payment_method}\nTanggal Bayar: ${format(new Date(payment.payment_date), 'dd MMMM yyyy', { locale: undefined })}\n\nSilakan unduh kwitansi pada link berikut: ${url}\n\nTerima kasih telah melakukan pembayaran tepat waktu.\nSalam,\nPengelola Kos`;
+        const shareText = `Berikut kwitansi pembayaran sewa kos untuk periode: *${periodeSewa}*\n\nNama: ${payment.residents.full_name}\nKamar: ${payment.residents.rooms?.room_number || "-"}\nNominal: Rp ${payment.amount.toLocaleString('id-ID')}\nMetode Pembayaran: ${payment.payment_method}\nTanggal Bayar: ${format(new Date(payment.payment_date), 'dd MMMM yyyy', { locale: undefined })}\n\nSilakan unduh kwitansi pada link berikut: ${url}\n\nTerima kasih telah melakukan pembayaran tepat waktu.\nSalam,\nPengelola Kos`;
         setShareModal({ url, text: shareText }); // Tampilkan modal share, gesture share dilakukan dari tombol modal
       } else {
         console.error('Upload PDF ke Supabase gagal');
