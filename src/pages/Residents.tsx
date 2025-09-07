@@ -38,6 +38,8 @@ interface Resident {
 export default function Residents() {
   const [residents, setResidents] = useState<Resident[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [loadingResidents, setLoadingResidents] = useState(false);
+  const [loadingRooms, setLoadingRooms] = useState(false);
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -96,6 +98,7 @@ export default function Residents() {
   const [selectedRoomId, setSelectedRoomId] = useState<string>("");
   const [maxSlot, setMaxSlot] = useState(1); // kapasitas kamar
   const [availableSlot, setAvailableSlot] = useState(1); // sisa slot kamar
+  const [searchTerm, setSearchTerm] = useState(""); // pencarian mobile
 
   useEffect(() => {
     fetchResidents();
@@ -104,6 +107,7 @@ export default function Residents() {
 
   const fetchResidents = async () => {
     try {
+      setLoadingResidents(true);
       let query = supabase
         .from("residents")
         .select(`*, rooms (room_number)`);
@@ -132,11 +136,14 @@ export default function Residents() {
       setRoomOccupancy(occ);
     } catch (error) {
       toast({ title: "Error", description: "Gagal memuat data penghuni", variant: "destructive" });
+    } finally {
+      setLoadingResidents(false);
     }
   };
 
   const fetchRooms = async () => {
     try {
+      setLoadingRooms(true);
       const { data, error } = await supabase
         .from("rooms")
         .select("*")
@@ -150,6 +157,8 @@ export default function Residents() {
         description: "Gagal memuat data kamar",
         variant: "destructive",
       });
+    } finally {
+      setLoadingRooms(false);
     }
   };
 
@@ -431,6 +440,12 @@ export default function Residents() {
           <DialogContent className="sm:max-w-[700px]">
             <DialogHeader>
               <DialogTitle>{selectedResident ? "Edit Penghuni" : "Tambah Penghuni Baru"}</DialogTitle>
+              {isLoading && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></span>
+                  <span>Menyimpan…</span>
+                </div>
+              )}
             </DialogHeader>
             {selectedResident ? (
               editMode === "single" ? (
@@ -515,131 +530,27 @@ export default function Residents() {
                       )}
                     </div>
                   )}
-                  <div className="space-y-2">
-                    <Label>Status Penghuni</Label>
-                    <Select value={formData.status_penghuni} onValueChange={val => setFormData(f => ({ ...f, status_penghuni: val }))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Pilih status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Aktif">Aktif</SelectItem>
-                        <SelectItem value="Sudah Keluar">Sudah Keluar</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {formData.status_penghuni === "Sudah Keluar" && (
-                    <div className="space-y-2">
-                      <Label>Tanggal Keluar</Label>
-                      <Input type="date" value={formData.tanggal_keluar} onChange={e => setFormData(f => ({ ...f, tanggal_keluar: e.target.value }))} />
-                    </div>
-                  )}
-                  <div className="flex justify-end space-x-2 pt-4">
-                    <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                      Batal
-                    </Button>
-                    <Button type="submit" disabled={isLoading}>
-                      {isLoading ? "Menyimpan..." : "Simpan"}
-                    </Button>
-                  </div>
                 </form>
               ) : (
-                // Multi edit mode
-                <form
-                  onSubmit={async e => {
-                    e.preventDefault();
-                    setIsLoading(true);
-                    try {
-                      // Ambil penghuni kamar dari database (urutan sama dengan formResidents kecuali blok kosong di akhir)
-                      const penghuniKamar = residents.filter(res => res.room_id.toString() === selectedRoomId);
-                      for (let i = 0; i < formResidents.length; i++) {
-                        const r = formResidents[i];
-                        // Jika blok ke-i sudah ada penghuni, lakukan update
-                        if (i < penghuniKamar.length) {
-                          const residentToUpdate = penghuniKamar[i];
-                          // Upload KTP jika ada file baru
-                          let ktpUrl = residentToUpdate.ktp_image_url;
-                          if (r.ktp_file) {
-                            ktpUrl = await uploadKtpImage(r.ktp_file, residentToUpdate.id);
-                          }
-                          // Upload dokumen nikah jika ada file baru
-                          let marriageUrl = residentToUpdate.marriage_document_url;
-                          if (r.marital_status === "Menikah" && r.marriage_file) {
-                            marriageUrl = await uploadMarriageDocument(r.marriage_file, residentToUpdate.id);
-                          }
-                          const { error } = await supabase
-                            .from("residents")
-                            .update({
-                              full_name: r.full_name,
-                              phone_number: r.phone_number,
-                              entry_date: r.entry_date,
-                              marital_status: r.marital_status,
-                              ktp_image_url: ktpUrl,
-                              marriage_document_url: marriageUrl,
-                            })
-                            .eq("id", residentToUpdate.id);
-                          if (error) throw error;
-                        } else {
-                          // Jika blok ke-i adalah blok kosong dan diisi, lakukan insert
-                          if (r.full_name && r.phone_number && r.entry_date) {
-                            // Upload KTP jika ada file
-                            let ktpUrl = undefined;
-                            if (r.ktp_file) {
-                              ktpUrl = await uploadKtpImage(r.ktp_file, `new_${Date.now()}_${i}`);
-                            }
-                            // Upload dokumen nikah jika ada file
-                            let marriageUrl = undefined;
-                            if (r.marital_status === "Menikah" && r.marriage_file) {
-                              marriageUrl = await uploadMarriageDocument(r.marriage_file, `new_${Date.now()}_${i}`);
-                            }
-                            const { error } = await supabase
-                              .from("residents")
-                              .insert({
-                                full_name: r.full_name,
-                                phone_number: r.phone_number,
-                                room_id: parseInt(selectedRoomId),
-                                entry_date: r.entry_date,
-                                is_active: true,
-                                marital_status: r.marital_status,
-                                status_penghuni: "Aktif",
-                                ktp_image_url: ktpUrl,
-                                marriage_document_url: marriageUrl,
-                              });
-                            if (error) throw error;
-                          }
-                        }
-                      }
-                      toast({ title: "Berhasil", description: "Data penghuni kamar berhasil diupdate/tambah" });
-                      setIsDialogOpen(false);
-                      fetchResidents();
-                    } catch (error) {
-                      toast({ title: "Error", description: "Gagal update/tambah data", variant: "destructive" });
-                    } finally {
-                      setIsLoading(false);
-                    }
-                  }}
-                  className="space-y-4"
-                >
-                  {formResidents.map((fr, idx) => (
-                    <div key={idx} className="border rounded p-4 mb-2">
-                      <div className="font-semibold mb-2">Penghuni {idx + 1}</div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Nama Lengkap</Label>
-                          <Input value={fr.full_name} onChange={e => handleFormResidentChange(idx, "full_name", e.target.value)} />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>No. Telepon</Label>
-                          <Input value={fr.phone_number} onChange={e => handleFormResidentChange(idx, "phone_number", e.target.value)} />
-                        </div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  {formResidents.map((resident, idx) => (
+                    <div key={idx} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Nama Lengkap</Label>
+                        <Input value={resident.full_name} onChange={e => handleFormResidentChange(idx, "full_name", e.target.value)} required={idx === 0} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>No. Telepon</Label>
+                        <Input value={resident.phone_number} onChange={e => handleFormResidentChange(idx, "phone_number", e.target.value)} required={idx === 0} />
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                         <div className="space-y-2">
                           <Label>Tanggal Masuk</Label>
-                          <Input type="date" value={fr.entry_date} onChange={e => handleFormResidentChange(idx, "entry_date", e.target.value)} />
+                          <Input type="date" value={resident.entry_date} onChange={e => handleFormResidentChange(idx, "entry_date", e.target.value)} required={idx === 0} />
                         </div>
                         <div className="space-y-2">
                           <Label>Status Pernikahan</Label>
-                          <Select value={fr.marital_status} onValueChange={val => handleFormResidentChange(idx, "marital_status", val)}>
+                          <Select value={resident.marital_status} onValueChange={val => handleFormResidentChange(idx, "marital_status", val)}>
                             <SelectTrigger>
                               <SelectValue placeholder="Pilih status pernikahan" />
                             </SelectTrigger>
@@ -652,99 +563,67 @@ export default function Residents() {
                       </div>
                       <div className="space-y-2 mt-2">
                         <Label>Upload KTP</Label>
-                        <Input type="file" accept="image/*,.pdf" onChange={e => handleFormResidentChange(idx, "ktp_file", e.target.files?.[0] || null)} />
-                        {fr.ktp_image_url && (
-                          <a href={fr.ktp_image_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs">Lihat KTP yang sudah diupload</a>
-                        )}
+                        <Input type="file" accept="image/*" onChange={e => handleFormResidentChange(idx, "ktp_file", e.target.files?.[0] || null)} />
                       </div>
-                      {fr.marital_status === "Menikah" && (
-                        <div className="space-y-2 mt-2">
-                          <Label>Upload Dokumen Nikah</Label>
-                          <Input type="file" accept="image/*,.pdf" onChange={e => handleFormResidentChange(idx, "marriage_file", e.target.files?.[0] || null)} />
-                          {fr.marriage_document_url && (
-                            <a href={fr.marriage_document_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs">Lihat dokumen nikah yang sudah diupload</a>
-                          )}
-                        </div>
-                      )}
                     </div>
                   ))}
                   <div className="flex justify-end space-x-2 pt-4">
                     <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                       Batal
                     </Button>
-                    <Button type="submit" disabled={isLoading}>
+                    <Button type="submit" disabled={isLoading || availableSlot === 0}>
                       {isLoading ? "Menyimpan..." : "Simpan"}
                     </Button>
                   </div>
                 </form>
               )
             ) : (
-              // ADD dialog (default)
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="room_id">Kamar</Label>
-                  <Select value={selectedRoomId} onValueChange={handleRoomChange}>
+                  <Label>Nama Lengkap</Label>
+                  <Input value={formData.full_name} onChange={e => setFormData(f => ({ ...f, full_name: e.target.value }))} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>No. Telepon</Label>
+                  <Input value={formData.phone_number} onChange={e => setFormData(f => ({ ...f, phone_number: e.target.value }))} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Tanggal Masuk</Label>
+                  <Input type="date" value={formData.entry_date} onChange={e => setFormData(f => ({ ...f, entry_date: e.target.value }))} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Status Pernikahan</Label>
+                  <Select value={formData.marital_status} onValueChange={val => setFormData(f => ({ ...f, marital_status: val }))}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Pilih kamar" />
+                      <SelectValue placeholder="Pilih status pernikahan" />
                     </SelectTrigger>
                     <SelectContent>
-                      {rooms.filter(room => {
-                      // Hanya tampilkan kamar yang benar-benar kosong
-                      const occ = roomOccupancy[room.id] || 0;
-                      return occ === 0;
-                    }).map(room => (
-                      <SelectItem key={room.id} value={room.id.toString()}>
-                        Kamar {room.room_number}
-                      </SelectItem>
-                    ))}
+                      <SelectItem value="Lajang">Lajang</SelectItem>
+                      <SelectItem value="Menikah">Menikah</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                {availableSlot === 0 && (
-                  <div className="text-red-500">Kamar sudah penuh, silakan pilih kamar lain.</div>
-                )}
-                {Array.from({ length: availableSlot }).map((_, idx) => (
-                  <div key={idx} className="border rounded p-4 mb-2">
-                    <div className="font-semibold mb-2">Penghuni {idx + 1} {idx === 1 ? "(Opsional)" : ""}</div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Nama Lengkap</Label>
-                        <Input value={formResidents[idx]?.full_name || ""} onChange={e => handleFormResidentChange(idx, "full_name", e.target.value)} required={idx === 0} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>No. Telepon</Label>
-                        <Input value={formResidents[idx]?.phone_number || ""} onChange={e => handleFormResidentChange(idx, "phone_number", e.target.value)} required={idx === 0} />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                      <div className="space-y-2">
-                        <Label>Tanggal Masuk</Label>
-                        <Input type="date" value={formResidents[idx]?.entry_date || ""} onChange={e => handleFormResidentChange(idx, "entry_date", e.target.value)} required={idx === 0} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Status Pernikahan</Label>
-                        <Select value={formResidents[idx]?.marital_status || "Lajang"} onValueChange={val => handleFormResidentChange(idx, "marital_status", val)}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Pilih status pernikahan" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Lajang">Lajang</SelectItem>
-                            <SelectItem value="Menikah">Menikah</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="space-y-2 mt-2">
-                      <Label>Upload KTP</Label>
-                      <Input type="file" accept="image/*" onChange={e => handleFormResidentChange(idx, "ktp_file", e.target.files?.[0] || null)} />
-                    </div>
+                <div className="space-y-2">
+                  <Label>Upload KTP</Label>
+                  <Input type="file" accept="image/*,.pdf" onChange={e => setFormData(f => ({ ...f, ktp_file: e.target.files?.[0] || null }))} />
+                  {formData.ktp_image_url && (
+                    <a href={formData.ktp_image_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs">Lihat KTP yang sudah diupload</a>
+                  )}
+                </div>
+                {formData.marital_status === "Menikah" && (
+                  <div className="space-y-2">
+                    <Label>Upload Dokumen Nikah</Label>
+                    <Input type="file" accept="image/*,.pdf" onChange={e => setFormData(f => ({ ...f, marriage_file: e.target.files?.[0] || null }))} />
+                    {formData.marriage_document_url && (
+                      <a href={formData.marriage_document_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs">Lihat dokumen nikah yang sudah diupload</a>
+                    )}
                   </div>
-                ))}
-                <div className="flex justify-end space-x-2 pt-4">
+                )}
+                <div className="flex justify-end space-x-2 pt-2">
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Batal
                   </Button>
-                  <Button type="submit" disabled={isLoading || availableSlot === 0}>
+                  <Button type="submit" disabled={isLoading}>
                     {isLoading ? "Menyimpan..." : "Simpan"}
                   </Button>
                 </div>
@@ -753,7 +632,6 @@ export default function Residents() {
           </DialogContent>
         </Dialog>
       </div>
-
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Daftar Penghuni</CardTitle>
@@ -774,7 +652,163 @@ export default function Residents() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          { (loadingResidents || loadingRooms) && (
+            <div className="block md:hidden space-y-3 mb-3">
+              <div className="flex items-center gap-2 text-muted-foreground text-sm pl-1">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                <span>Memuat data…</span>
+              </div>
+              {[1,2,3].map((i) => (
+                <div key={i} className="rounded-xl border border-muted p-3 bg-card shadow-sm animate-pulse">
+                  <div className="flex items-start justify-between">
+                    <div className="h-4 bg-muted rounded w-32" />
+                    <div className="h-4 bg-muted rounded w-24" />
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="h-3 bg-muted rounded w-20" />
+                    <div className="h-3 bg-muted rounded w-20 ml-auto" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Mobile controls: search + status badge */}
+          <div className="block md:hidden mb-3">
+            <div className="flex items-center gap-2">
+              <Input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Cari nama / kamar / no. HP..."
+              />
+              <Badge variant="secondary" className="whitespace-nowrap text-xs py-1">{statusFilter}</Badge>
+            </div>
+          </div>
+          {/* Mobile list (cards) */}
+          <div className={`block md:hidden space-y-3 ${loadingResidents || loadingRooms ? 'hidden' : ''}`}>
+            {residents
+              .filter((r) => {
+                const term = searchTerm.trim().toLowerCase();
+                if (!term) return true;
+                const name = (r.full_name || "").toLowerCase();
+                const phone = (r.phone_number || "").toLowerCase();
+                const room = String(r.rooms?.room_number ?? r.room_id ?? "").toLowerCase();
+                return (
+                  name.includes(term) ||
+                  phone.includes(term) ||
+                  room.includes(term)
+                );
+              })
+              .slice()
+              .sort((a, b) => (a.rooms.room_number || 0) - (b.rooms.room_number || 0))
+              .map((resident) => (
+                <div key={resident.id} className="rounded-xl border border-muted p-3 bg-card text-card-foreground shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-base font-semibold">{resident.full_name}</div>
+                      <div className="text-xs text-muted-foreground">Kamar {resident.rooms.room_number}</div>
+                    </div>
+                    <div className="text-right">
+                      <a href={`tel:${resident.phone_number}`} className="block text-sm font-medium">{resident.phone_number}</a>
+                      <div className="text-[11px] text-muted-foreground">Masuk: {format(new Date(resident.entry_date), 'dd/MM/yyyy')}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="text-[11px] text-muted-foreground leading-none">Status</div>
+                      <div className="text-sm font-medium leading-tight">{resident.status_penghuni || 'Aktif'}</div>
+                    </div>
+                    <div className="flex flex-col gap-0.5 text-right items-end">
+                      <div className="text-[11px] text-muted-foreground leading-none">Pernikahan</div>
+                      <div className="text-sm font-medium leading-tight">{resident.marital_status || 'Lajang'}</div>
+                    </div>
+                    {statusFilter === 'Sudah Keluar' && (
+                      <div className="col-span-2 flex flex-col gap-0.5">
+                        <div className="text-[11px] text-muted-foreground leading-none">Tanggal Keluar</div>
+                        <div className="text-sm font-medium leading-tight">{resident.tanggal_keluar ? format(new Date(resident.tanggal_keluar), 'dd/MM/yyyy') : '-'}</div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Document links row */}
+                  {(resident.ktp_image_url || resident.marriage_document_url) && (
+                    <div className="mt-3 flex items-center gap-2">
+                      {resident.ktp_image_url && (
+                        <Button variant="outline" size="sm" onClick={() => window.open(resident.ktp_image_url!, '_blank')} className="flex-1 rounded-full">
+                          <User className="h-4 w-4 mr-2" /> Lihat KTP
+                        </Button>
+                      )}
+                      {resident.marriage_document_url && (
+                        <Button variant="outline" size="sm" onClick={() => window.open(resident.marriage_document_url!, '_blank')} className="flex-1 rounded-full">
+                          <Upload className="h-4 w-4 mr-2" /> Dokumen Nikah
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <Button variant="outline" size="sm" className="w-full rounded-full" onClick={() => openEditDialog(resident)}>
+                      Edit
+                    </Button>
+                    {resident.status_penghuni === 'Aktif' && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" size="sm" className="w-full rounded-full bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 hover:text-amber-700">
+                            Tandai Keluar
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Tandai Sudah Keluar</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Apakah Anda yakin ingin menandai {resident.full_name} sebagai sudah keluar?
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Batal</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleMarkAsLeft(resident)}>
+                              Tandai Sudah Keluar
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="w-full rounded-full bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20">
+                          Hapus
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Hapus Penghuni</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Apakah Anda yakin ingin menghapus {resident.full_name}? Tindakan ini tidak dapat dibatalkan.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Batal</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleDelete(resident.id)}>
+                            Hapus
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </div>
+              ))}
+            {residents.length === 0 && (
+              <div className="text-center text-muted-foreground py-2">Tidak ada data.</div>
+            )}
+          </div>
+
+          {/* Desktop/tablet table */}
+          <div className="hidden md:block overflow-x-auto">
+          { (loadingResidents || loadingRooms) ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <div className="text-sm">Memuat data…</div>
+            </div>
+          ) : (
+          <Table className="min-w-[900px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Nama</TableHead>
@@ -807,102 +841,102 @@ export default function Residents() {
                     <TableCell>
                       <Badge variant="default">
                         {resident.status_penghuni || "Aktif"}
-                    </Badge>
-                  </TableCell>
-                  {statusFilter === "Sudah Keluar" && (
-                    <TableCell>
-                      {resident.tanggal_keluar ? format(new Date(resident.tanggal_keluar), "dd/MM/yyyy") : "-"}
+                      </Badge>
                     </TableCell>
-                  )}
-                  <TableCell>
-                    {resident.ktp_image_url ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.open(resident.ktp_image_url, '_blank')}
-                      >
-                        <User className="h-4 w-4" />
-                      </Button>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
+                    {statusFilter === "Sudah Keluar" && (
+                      <TableCell>
+                        {resident.tanggal_keluar ? format(new Date(resident.tanggal_keluar), "dd/MM/yyyy") : "-"}
+                      </TableCell>
                     )}
-                  </TableCell>
-                  <TableCell>
-                    {resident.marriage_document_url ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.open(resident.marriage_document_url, '_blank')}
-                      >
-                        <Upload className="h-4 w-4" />
-                      </Button>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openEditDialog(resident)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      
-                      {resident.status_penghuni === "Aktif" && (
+                    <TableCell>
+                      {resident.ktp_image_url ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(resident.ktp_image_url, '_blank')}
+                        >
+                          <User className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {resident.marriage_document_url ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(resident.marriage_document_url, '_blank')}
+                        >
+                          <Upload className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openEditDialog(resident)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        {resident.status_penghuni === "Aktif" && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="outline" size="sm" className="bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 hover:text-amber-700">
+                                <User className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Tandai Sudah Keluar</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Apakah Anda yakin ingin menandai {resident.full_name} sebagai sudah keluar?
+                                  Tindakan ini akan mengubah status kamar menjadi kosong jika tidak ada penghuni aktif lainnya.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Batal</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleMarkAsLeft(resident)}>
+                                  Tandai Sudah Keluar
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="outline" size="sm" className="bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 hover:text-amber-700">
-                              <User className="h-4 w-4" />
+                            <Button variant="outline" size="sm">
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Tandai Sudah Keluar</AlertDialogTitle>
+                              <AlertDialogTitle>Hapus Penghuni</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Apakah Anda yakin ingin menandai {resident.full_name} sebagai sudah keluar?
-                                Tindakan ini akan mengubah status kamar menjadi kosong jika tidak ada penghuni aktif lainnya.
+                                Apakah Anda yakin ingin menghapus {resident.full_name}? 
+                                Tindakan ini tidak dapat dibatalkan.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Batal</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleMarkAsLeft(resident)}>
-                                Tandai Sudah Keluar
+                              <AlertDialogAction onClick={() => handleDelete(resident.id)}>
+                                Hapus
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
-                      )}
-                      
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="outline" size="sm">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Hapus Penghuni</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Apakah Anda yakin ingin menghapus {resident.full_name}? 
-                              Tindakan ini tidak dapat dibatalkan.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Batal</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(resident.id)}>
-                              Hapus
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
             </TableBody>
           </Table>
+          )}
+          </div>
         </CardContent>
       </Card>
     </div>

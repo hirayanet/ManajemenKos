@@ -409,7 +409,29 @@ export default function Expenses() {
           {errorMsg && <span className="text-red-600">{errorMsg}</span>}
         </div>
       </form>
-      <div className="overflow-x-auto">
+      {/* Mobile list (cards) */}
+      <div className="block md:hidden space-y-3">
+        {expenses.map((exp) => (
+          <div key={exp.id} className="rounded-lg border p-4 bg-card text-card-foreground">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold">{exp.category}</div>
+                <div className="text-xs text-muted-foreground">{format(parseISO(exp.expense_date), "dd/MM/yyyy")}</div>
+              </div>
+              <div className="font-semibold">Rp {exp.amount.toLocaleString('id-ID')}</div>
+            </div>
+            {exp.description && (
+              <div className="mt-2 text-sm text-muted-foreground">{exp.description}</div>
+            )}
+          </div>
+        ))}
+        {expenses.length === 0 && (
+          <div className="text-center text-muted-foreground py-2">Belum ada data pengeluaran.</div>
+        )}
+      </div>
+
+      {/* Desktop/tablet table */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="min-w-full border text-sm">
           <thead>
             <tr className="bg-gray-100">

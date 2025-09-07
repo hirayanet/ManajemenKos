@@ -93,30 +93,56 @@ export default function ResidentHistory() {
               Belum ada data riwayat penghuni
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nama</TableHead>
-                  <TableHead>Kamar</TableHead>
-                  <TableHead>Tanggal Masuk</TableHead>
-                  <TableHead>Tanggal Keluar</TableHead>
-                  <TableHead>Lama Tinggal</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* Mobile list (cards) */}
+              <div className="block md:hidden space-y-3">
                 {history.map((resident) => (
-                  <TableRow key={resident.id}>
-                    <TableCell className="font-medium">{resident.full_name}</TableCell>
-                    <TableCell>Kamar {resident.rooms.room_number}</TableCell>
-                    <TableCell>{format(new Date(resident.entry_date), "dd/MM/yyyy")}</TableCell>
-                    <TableCell>{format(new Date(resident.tanggal_keluar), "dd/MM/yyyy")}</TableCell>
-                    <TableCell>
-                      {calculateStayDuration(resident.entry_date, resident.tanggal_keluar)}
-                    </TableCell>
-                  </TableRow>
+                  <div key={resident.id} className="rounded-lg border p-4 bg-card text-card-foreground">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-semibold truncate">{resident.full_name}</div>
+                        <div className="text-sm text-muted-foreground">Kamar {resident.rooms.room_number}</div>
+                      </div>
+                      <div className="text-right text-sm">
+                        <div className="text-xs text-muted-foreground">Masuk: {format(new Date(resident.entry_date), 'dd/MM/yyyy')}</div>
+                        <div className="text-xs text-muted-foreground">Keluar: {format(new Date(resident.tanggal_keluar), 'dd/MM/yyyy')}</div>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-sm">
+                      Lama tinggal: <span className="font-medium">{calculateStayDuration(resident.entry_date, resident.tanggal_keluar)}</span>
+                    </div>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+
+              {/* Desktop/tablet table */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table className="min-w-[720px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nama</TableHead>
+                      <TableHead>Kamar</TableHead>
+                      <TableHead>Tanggal Masuk</TableHead>
+                      <TableHead>Tanggal Keluar</TableHead>
+                      <TableHead>Lama Tinggal</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {history.map((resident) => (
+                      <TableRow key={resident.id}>
+                        <TableCell className="font-medium">{resident.full_name}</TableCell>
+                        <TableCell>Kamar {resident.rooms.room_number}</TableCell>
+                        <TableCell>{format(new Date(resident.entry_date), "dd/MM/yyyy")}</TableCell>
+                        <TableCell>{format(new Date(resident.tanggal_keluar), "dd/MM/yyyy")}</TableCell>
+                        <TableCell>
+                          {calculateStayDuration(resident.entry_date, resident.tanggal_keluar)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

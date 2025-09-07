@@ -50,8 +50,15 @@ export function generateKwitansiPDF({
   // tanggal: tanggal pembayaran (yyyy-mm-dd)
   let periodeSewa = '';
   try {
-    const masuk = new Date(tanggalMasuk);
-    const bayar = new Date(tanggal);
+    // Parse tanggal secara manual untuk menghindari pergeseran timezone
+    const parseYMD = (s: string) => {
+      const [y, m, d] = s.split('-').map((v) => parseInt(v, 10));
+      // Gunakan Date(year, monthIndex, day) agar dianggap waktu lokal tanpa offset UTC
+      return new Date(y, (m || 1) - 1, d || 1);
+    };
+
+    const masuk = parseYMD(tanggalMasuk);
+    const bayar = parseYMD(tanggal);
     // Validasi tanggal
     if (
       !tanggalMasuk || !tanggal ||

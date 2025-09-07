@@ -197,7 +197,14 @@ export default function Reports() {
           </Button>
         </div>
       </div>
+      {isLoading && (
+        <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <div className="text-sm">Memuat data…</div>
+        </div>
+      )}
 
+      <div className={isLoading ? 'hidden' : ''}>
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
@@ -349,15 +356,18 @@ export default function Reports() {
             </ResponsiveContainer>
           </CardContent>
         </Card>
-      </div>
 
-      {/* Monthly Data Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Detail Pendapatan & Pengeluaran per Bulan</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
+
+    </div>
+
+    {/* Monthly Data Table */}
+    <Card>
+      <CardHeader>
+        <CardTitle>Detail Pendapatan & Pengeluaran per Bulan</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <Table className="min-w-[720px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Bulan</TableHead>
@@ -383,8 +393,10 @@ export default function Reports() {
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
-    </div>
-  );
+        </div>
+      </CardContent>
+    </Card>
+      </div>
+  </div>
+);
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
@@ -10,6 +10,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { PlusCircle, Edit, Trash2, Download, Receipt } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { WhatsappIcon } from '@/components/ui/WhatsappIcon';
 import {
   DropdownMenu,
@@ -58,7 +60,14 @@ export default function Payments() {
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(0);
+  const pageSize = 50;
+  const [hasMore, setHasMore] = useState(true);
   const { toast } = useToast();
+  const isMobile = useIsMobile();
+  const [kwitansiSheetPayment, setKwitansiSheetPayment] = useState<Payment | null>(null);
 
   const [formData, setFormData] = useState({
     resident_id: "",
@@ -81,13 +90,14 @@ export default function Payments() {
   ];
 
   useEffect(() => {
-    fetchPayments();
-    fetchResidents();
+    fetchPayments(0);
   }, []);
 
-  const fetchPayments = async () => {
+  const fetchPayments = async (targetPage: number) => {
     try {
-      setPayments([]);
+      // Skeleton only for first page; otherwise use loadingMore state
+      if (targetPage === 0) setLoadingPayments(true);
+      if (targetPage > 0) setLoadingMore(true);
       // Ambil tanggal hari ini
       const today = new Date();
       // Jika tanggal 1 jam 00:00-00:01, reset tampilan (tidak ada data)
@@ -117,16 +127,28 @@ export default function Payments() {
         `)
         .gte("payment_date", startDate)
         .lte("payment_date", endDate)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .range(targetPage * pageSize, targetPage * pageSize + pageSize - 1);
 
       if (error) throw error;
-      setPayments(data || []);
+      const rows = data || [];
+      if (targetPage === 0) {
+        setPayments(rows);
+      } else {
+        setPayments((prev) => [...prev, ...rows]);
+      }
+      setHasMore(rows.length === pageSize);
+      setPage(targetPage);
     } catch (error) {
       toast({
         title: "Error",
         description: "Gagal memuat data pembayaran",
         variant: "destructive",
       });
+    }
+    finally {
+      if (targetPage === 0) setLoadingPayments(false);
+      if (targetPage > 0) setLoadingMore(false);
     }
   };
 
@@ -241,9 +263,7 @@ export default function Payments() {
       setUploadingId(null);
     }
   };
-
-
-
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -284,7 +304,7 @@ export default function Payments() {
 
       setIsDialogOpen(false);
       resetForm();
-      fetchPayments();
+      fetchPayments(0);
     } catch (error) {
       toast({
         title: "Error",
@@ -309,7 +329,7 @@ export default function Payments() {
         title: "Berhasil",
         description: "Pembayaran berhasil dihapus",
       });
-      fetchPayments();
+      fetchPayments(0);
       fetchResidents();
     } catch (error) {
       toast({
@@ -343,10 +363,18 @@ export default function Payments() {
     setIsDialogOpen(true);
   };
 
-  const openAddDialog = () => {
+  const openAddDialog = async () => {
     resetForm();
+    // Lazy load daftar penghuni hanya saat dibutuhkan
+    await fetchResidents();
     setIsDialogOpen(true);
   };
+
+  const paymentsSorted = useMemo(() =>
+    payments
+      .slice()
+      .sort((a, b) => (a.residents.rooms.room_number || 0) - (b.residents.rooms.room_number || 0))
+  , [payments]);
 
   return (
     <div className="space-y-6">
@@ -367,6 +395,12 @@ export default function Payments() {
               <DialogDescription>
                 Silakan lengkapi data pembayaran kos di bawah ini. Semua kolom wajib diisi.
               </DialogDescription>
+              {isLoading && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></span>
+                  <span>Menyimpan…</span>
+                </div>
+              )}
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -469,7 +503,111 @@ export default function Payments() {
           <CardTitle>Daftar Pembayaran</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          {/* Mobile list (cards) */}
+          {loadingPayments && (
+            <div className="block md:hidden space-y-3">
+              {[1,2,3].map((i) => (
+                <div key={i} className="rounded-lg border p-4 bg-card text-card-foreground animate-pulse">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="h-4 bg-muted rounded w-32" />
+                      <div className="h-3 bg-muted rounded w-24 mt-2" />
+                    </div>
+                    <div className="text-right">
+                      <div className="h-4 bg-muted rounded w-24 ml-auto" />
+                      <div className="h-3 bg-muted rounded w-16 mt-2 ml-auto" />
+                    </div>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                    <div className="h-3 bg-muted rounded w-20" />
+                    <div className="h-3 bg-muted rounded w-20 ml-auto" />
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <div className="h-8 bg-muted rounded w-full" />
+                    <div className="h-8 bg-muted rounded w-10" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className={`block md:hidden space-y-3 ${loadingPayments ? 'hidden' : ''}`}>
+            {payments
+              .slice()
+              .sort((a, b) => (a.residents.rooms.room_number || 0) - (b.residents.rooms.room_number || 0))
+              .map((payment) => (
+                <div key={payment.id} className="rounded-lg border p-4 bg-card text-card-foreground">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold truncate">{payment.residents?.full_name || '-'}</div>
+                      <div className="text-sm text-muted-foreground">Kamar {payment.residents?.rooms?.room_number || '-'}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-semibold">Rp {payment.amount.toLocaleString('id-ID')}</div>
+                      <div className="text-xs text-muted-foreground">{format(new Date(payment.payment_date), 'dd/MM/yyyy')}</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <div className="text-muted-foreground">Bulan</div>
+                      <div className="font-medium">{payment.payment_month}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Metode</div>
+                      <div className="font-medium">{payment.payment_method}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      title="Aksi Kwitansi"
+                      onClick={() => setKwitansiSheetPayment(payment)}
+                    >
+                      <Receipt className="h-4 w-4 mr-1" /> Kwitansi
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Hapus Pembayaran</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Apakah Anda yakin ingin menghapus pembayaran ini? 
+                            Tindakan ini tidak dapat dibatalkan.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Batal</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleDelete(payment.id)}>
+                            Hapus
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </div>
+              ))}
+          </div>
+          {!loadingPayments && hasMore && (
+            <div className="block md:hidden mt-4">
+              <Button onClick={() => fetchPayments(page + 1)} disabled={loadingMore} className="w-full">
+                {loadingMore ? 'Memuat…' : 'Muat lebih banyak'}
+              </Button>
+            </div>
+          )}
+
+          {/* Desktop/tablet table */}
+          <div className="hidden md:block overflow-x-auto">
+          {loadingPayments ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : (
+          <Table className="min-w-[760px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Penghuni</TableHead>
@@ -546,8 +684,53 @@ export default function Payments() {
                 ))}
             </TableBody>
           </Table>
+          )}
+          </div>
+          {!loadingPayments && hasMore && (
+            <div className="hidden md:flex justify-center mt-4">
+              <Button onClick={() => fetchPayments(page + 1)} disabled={loadingMore} variant="outline">
+                {loadingMore ? 'Memuat…' : 'Muat lebih banyak'}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
+      {/* Mobile Kwitansi Action Sheet */}
+      <Sheet open={!!kwitansiSheetPayment} onOpenChange={(o) => { if (!o) setKwitansiSheetPayment(null); }}>
+        <SheetContent side="bottom" className="p-4">
+          {kwitansiSheetPayment && (
+            <div className="space-y-3">
+              <div className="text-sm text-muted-foreground">
+                Aksi Kwitansi untuk <span className="font-medium">{kwitansiSheetPayment.residents?.full_name || '-'}</span>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full justify-center"
+                onClick={() => {
+                  generateReceiptPDF(kwitansiSheetPayment);
+                  setKwitansiSheetPayment(null);
+                }}
+              >
+                <Receipt className="h-4 w-4 mr-2" /> Download Kwitansi
+              </Button>
+              <Button
+                className="w-full justify-center"
+                disabled={uploadingId === kwitansiSheetPayment.id}
+                onClick={() => handleShareKwitansi(kwitansiSheetPayment)}
+              >
+                {uploadingId === kwitansiSheetPayment.id ? (
+                  <span className="flex items-center">
+                    <span className="animate-spin mr-2 h-4 w-4 border-2 border-blue-400 border-t-transparent rounded-full"></span>
+                    Uploading...
+                  </span>
+                ) : (
+                  <>Share Link Kwitansi</>
+                )}
+              </Button>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
       {/* Modal Pilihan Media Share */}
       {shareModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
