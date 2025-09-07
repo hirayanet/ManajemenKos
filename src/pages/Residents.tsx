@@ -671,7 +671,7 @@ export default function Residents() {
                     </SelectContent>
                   </Select>
                   {selectedRoomId && (
-                    <p className="text-xs text-muted-foreground">Sisa slot kamar: {availableSlot}</p>
+                    <p className="text-xs text-muted-foreground">Kapasitas kamar: {availableSlot}</p>
                   )}
                 </div>
                 <div className="space-y-2">
