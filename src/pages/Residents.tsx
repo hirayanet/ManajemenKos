@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -100,35 +100,49 @@ export default function Residents() {
   const [availableSlot, setAvailableSlot] = useState(1); // sisa slot kamar
   const [searchTerm, setSearchTerm] = useState(""); // pencarian mobile
 
+  // Helper kapasitas kamar
+  const getRoomCapacity = (roomNumber: number) => (roomNumber >= 7 && roomNumber <= 15 ? 2 : 1);
+  const availableRooms = useMemo(() => {
+    // Hanya tampilkan kamar yang benar-benar kosong (belum terisi sama sekali)
+    return rooms.filter((room) => {
+      const occ = roomOccupancy[room.id] || 0;
+      return occ === 0;
+    });
+  }, [rooms, roomOccupancy]);
+
   useEffect(() => {
     fetchResidents();
     fetchRooms();
   }, []);
+  // Refetch when statusFilter changes to ensure UI matches selection
+  useEffect(() => {
+    fetchResidents();
+  }, [statusFilter]);
 
   const fetchResidents = async () => {
     try {
       setLoadingResidents(true);
-      let query = supabase
+      const { data, error } = await supabase
         .from("residents")
-        .select(`*, rooms (room_number)`);
-      
-      // Filter berdasarkan status
-      if (statusFilter !== "Semua") {
-        query = query.eq("status_penghuni", statusFilter);
-      }
-      
-      const { data, error } = await query.order("created_at", { ascending: false });
+        .select(`*, rooms (room_number)`) 
+        .order("created_at", { ascending: false });
   
       if (error) throw error;
-      // Pastikan status_penghuni ada (default "Aktif")
-      const residentsWithStatus = (data || []).map((r: Resident) => ({
-        ...r,
-        status_penghuni: r.status_penghuni || "Aktif",
-      }));
-      setResidents(residentsWithStatus);
+      // Normalisasi status: gunakan status_penghuni, jika null gunakan is_active
+      const normalized = (data || []).map((r: any) => {
+        const status = r.status_penghuni ?? (r.is_active ? "Aktif" : "Sudah Keluar");
+        return { ...r, status_penghuni: status } as Resident;
+      });
+
+      // Terapkan filter di client agar data yang status_penghuni null tetap muncul benar
+      const filtered = statusFilter === "Semua"
+        ? normalized
+        : normalized.filter((r: Resident) => r.status_penghuni === statusFilter);
+
+      setResidents(filtered);
       // Hitung occupancy
       const occ: { [roomId: number]: number } = {};
-      residentsWithStatus.forEach((r: Resident) => {
+      normalized.forEach((r: Resident) => {
         if (r.status_penghuni === "Aktif") {
           occ[r.room_id] = (occ[r.room_id] || 0) + 1;
         }
@@ -138,6 +152,65 @@ export default function Residents() {
       toast({ title: "Error", description: "Gagal memuat data penghuni", variant: "destructive" });
     } finally {
       setLoadingResidents(false);
+    }
+  };
+
+  // Handle submit single penghuni (form sederhana)
+  const handleSubmitSingle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      if (!selectedRoomId) {
+        toast({ title: "Error", description: "Silakan pilih kamar terlebih dahulu", variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
+      if (availableSlot === 0) {
+        toast({ title: "Penuh", description: "Kamar ini sudah penuh. Silakan pilih kamar lain.", variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
+      if (!formData.full_name || !formData.phone_number || !formData.entry_date) {
+        toast({ title: "Error", description: "Nama, No. Telepon, dan Tanggal Masuk wajib diisi", variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
+
+      const { data: newResident, error } = await supabase
+        .from("residents")
+        .insert({
+          full_name: formData.full_name,
+          phone_number: formData.phone_number,
+          room_id: parseInt(selectedRoomId),
+          entry_date: formData.entry_date,
+          is_active: true,
+          marital_status: formData.marital_status,
+          status_penghuni: "Aktif",
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Upload KTP jika ada
+      if (formData.ktp_file && newResident) {
+        const imageUrl = await uploadKtpImage(formData.ktp_file, newResident.id);
+        await supabase.from("residents").update({ ktp_image_url: imageUrl }).eq("id", newResident.id);
+      }
+      // Upload dokumen nikah jika ada dan status menikah
+      if (formData.marital_status === "Menikah" && formData.marriage_file && newResident) {
+        const docUrl = await uploadMarriageDocument(formData.marriage_file, newResident.id);
+        await supabase.from("residents").update({ marriage_document_url: docUrl }).eq("id", newResident.id);
+      }
+
+      toast({ title: "Berhasil", description: "Penghuni berhasil ditambahkan" });
+      setIsDialogOpen(false);
+      resetForm();
+      fetchResidents();
+    } catch (error) {
+      toast({ title: "Error", description: "Terjadi kesalahan saat menyimpan data", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -578,7 +651,29 @@ export default function Residents() {
                 </form>
               )
             ) : (
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmitSingle} className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Pilih Kamar</Label>
+                  <Select value={selectedRoomId} onValueChange={(val) => handleRoomChange(val)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih kamar" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableRooms.length === 0 ? (
+                        <div className="px-2 py-1 text-sm text-muted-foreground">Tidak ada kamar tersedia</div>
+                      ) : (
+                        availableRooms.map((room) => (
+                          <SelectItem key={room.id} value={room.id.toString()}>
+                            Kamar {room.room_number}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {selectedRoomId && (
+                    <p className="text-xs text-muted-foreground">Sisa slot kamar: {availableSlot}</p>
+                  )}
+                </div>
                 <div className="space-y-2">
                   <Label>Nama Lengkap</Label>
                   <Input value={formData.full_name} onChange={e => setFormData(f => ({ ...f, full_name: e.target.value }))} required />
@@ -638,7 +733,6 @@ export default function Residents() {
           <div className="flex space-x-2">
             <Select value={statusFilter} onValueChange={(value: "Aktif" | "Sudah Keluar" | "Semua") => {
               setStatusFilter(value);
-              fetchResidents();
             }}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter Status" />
