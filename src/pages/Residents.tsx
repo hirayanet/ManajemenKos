@@ -76,6 +76,7 @@ export default function Residents() {
   });
 
   interface FormResidentType {
+    id?: string;
     full_name: string;
     phone_number: string;
     entry_date: string;
@@ -351,47 +352,99 @@ export default function Residents() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      // Validasi minimal 1 blok terisi
-      const filled = formResidents.filter(r => r.full_name && r.phone_number && r.entry_date);
+      // Validasi minimal 1 blok terisi (untuk penambahan baru, no HP tidak wajib)
+      const filled = formResidents.filter(r => r.full_name && r.entry_date);
       if (filled.length === 0) {
         toast({ title: "Error", description: "Minimal 1 penghuni harus diisi", variant: "destructive" });
         setIsLoading(false);
         return;
       }
-      // Simpan semua blok yang terisi
+      // Pastikan room terpilih (seharusnya sudah di-set di openEditDialog)
+      if (!selectedRoomId) {
+        toast({ title: "Error", description: "Kamar tidak terdeteksi. Tutup dan buka kembali edit kamar, lalu coba lagi.", variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
+      console.log('[Residents] Multi-save start', { selectedRoomId, blocks: filled.map((r) => ({ id: r.id, full_name: r.full_name })) });
+      let insertedCount = 0;
+      let updatedCount = 0;
+      // Simpan semua blok yang terisi: update jika ada id, insert jika blok baru
       for (let i = 0; i < filled.length; i++) {
         const r = filled[i];
-        const { data: newResident, error } = await supabase
-          .from("residents")
-          .insert({
-            full_name: r.full_name,
-            phone_number: r.phone_number,
-            room_id: parseInt(selectedRoomId),
-            entry_date: r.entry_date,
-            is_active: true,
-            marital_status: r.marital_status,
-            status_penghuni: "Aktif",
-          })
-          .select()
-          .single();
-        if (error) throw error;
-        // Upload KTP jika ada
-        if (r.ktp_file && newResident) {
-          const imageUrl = await uploadKtpImage(r.ktp_file, newResident.id);
-          await supabase.from("residents").update({ ktp_image_url: imageUrl }).eq("id", newResident.id);
-        }
-        // Upload dokumen nikah jika status menikah dan ada file
-        if (r.marital_status === "Menikah" && r.marriage_file && newResident) {
-          const docUrl = await uploadMarriageDocument(r.marriage_file, newResident.id);
-          await supabase.from("residents").update({ marriage_document_url: docUrl }).eq("id", newResident.id);
+        if (r.id) {
+          const phoneVal = (r.phone_number && r.phone_number.trim().length > 0) ? r.phone_number.trim() : null;
+          // UPDATE existing resident
+          const { error: updErr } = await supabase
+            .from("residents")
+            .update({
+              full_name: r.full_name,
+              phone_number: phoneVal,
+              entry_date: r.entry_date,
+              marital_status: r.marital_status,
+            })
+            .eq("id", r.id);
+          if (updErr) {
+            console.error('[Residents] Update resident failed', updErr);
+            throw updErr;
+          }
+          updatedCount += 1;
+          // Upload KTP jika ada file baru
+          if (r.ktp_file) {
+            const imageUrl = await uploadKtpImage(r.ktp_file, r.id);
+            await supabase.from("residents").update({ ktp_image_url: imageUrl }).eq("id", r.id);
+          }
+          // Upload dokumen nikah jika status menikah dan ada file
+          if (r.marital_status === "Menikah" && r.marriage_file) {
+            const docUrl = await uploadMarriageDocument(r.marriage_file, r.id);
+            await supabase.from("residents").update({ marriage_document_url: docUrl }).eq("id", r.id);
+          }
+        } else {
+          const phoneVal = (r.phone_number && r.phone_number.trim().length > 0) ? r.phone_number.trim() : null;
+          // INSERT new resident (slot kosong terisi baru)
+          const { data: newResident, error } = await supabase
+            .from("residents")
+            .insert({
+              full_name: r.full_name,
+              phone_number: phoneVal,
+              room_id: parseInt(selectedRoomId),
+              entry_date: r.entry_date,
+              is_active: true,
+              marital_status: r.marital_status,
+              status_penghuni: "Aktif",
+            })
+            .select()
+            .single();
+          if (error) {
+            console.error('[Residents] Insert resident failed', error);
+            throw error;
+          }
+          insertedCount += 1;
+          // Upload KTP jika ada
+          if (r.ktp_file && newResident) {
+            const imageUrl = await uploadKtpImage(r.ktp_file, newResident.id);
+            await supabase.from("residents").update({ ktp_image_url: imageUrl }).eq("id", newResident.id);
+          }
+          // Upload dokumen nikah jika status menikah dan ada file
+          if (r.marital_status === "Menikah" && r.marriage_file && newResident) {
+            const docUrl = await uploadMarriageDocument(r.marriage_file, newResident.id);
+            await supabase.from("residents").update({ marriage_document_url: docUrl }).eq("id", newResident.id);
+          }
         }
       }
-      toast({ title: "Berhasil", description: `${filled.length} penghuni berhasil ditambahkan` });
+      if (insertedCount === 0 && updatedCount === 0) {
+        toast({ title: "Tidak ada perubahan", description: "Tidak ada data baru yang ditambahkan atau diubah.", variant: "destructive" });
+      } else {
+        const parts = [] as string[];
+        if (insertedCount > 0) parts.push(`${insertedCount} ditambahkan`);
+        if (updatedCount > 0) parts.push(`${updatedCount} diupdate`);
+        toast({ title: "Berhasil", description: parts.join(" • ") });
+      }
       setIsDialogOpen(false);
       resetForm();
-      fetchResidents();
-    } catch (error) {
-      toast({ title: "Error", description: "Terjadi kesalahan saat menyimpan data", variant: "destructive" });
+      await fetchResidents();
+    } catch (error: any) {
+      const msg = error?.message || error?.hint || 'Terjadi kesalahan saat menyimpan data';
+      toast({ title: "Error", description: msg, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -445,7 +498,8 @@ export default function Residents() {
       // Ambil semua penghuni di kamar tersebut
       const penghuniKamar = residents.filter(r => r.room_id === resident.room_id);
       // Jika penghuni < 2, tambahkan blok kosong untuk slot yang masih tersedia
-      const blocks = [...penghuniKamar.map(r => ({
+      const blocks: FormResidentType[] = [...penghuniKamar.map(r => ({
+        id: r.id,
         full_name: r.full_name,
         phone_number: r.phone_number,
         entry_date: r.entry_date,
@@ -457,6 +511,7 @@ export default function Residents() {
       }))];
       if (blocks.length < 2) {
         blocks.push({
+          id: undefined,
           full_name: "",
           phone_number: "",
           entry_date: "",
@@ -599,7 +654,7 @@ export default function Residents() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Upload KTP</Label>
+                    <Label className="flex items-center gap-2">Upload KTP {formData.ktp_image_url && (<Badge variant="secondary" className="text-[10px]">Sudah ada</Badge>)}</Label>
                     <Input type="file" accept="image/*,.pdf" onChange={e => setFormData(f => ({ ...f, ktp_file: e.target.files?.[0] || null }))} />
                     {formData.ktp_image_url && (
                       <a href={formData.ktp_image_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs">Lihat KTP yang sudah diupload</a>
@@ -607,7 +662,7 @@ export default function Residents() {
                   </div>
                   {formData.marital_status === "Menikah" && (
                     <div className="space-y-2">
-                      <Label>Upload Dokumen Nikah</Label>
+                      <Label className="flex items-center gap-2">Upload Dokumen Nikah {formData.marriage_document_url && (<Badge variant="secondary" className="text-[10px]">Sudah ada</Badge>)}</Label>
                       <Input type="file" accept="image/*,.pdf" onChange={e => setFormData(f => ({ ...f, marriage_file: e.target.files?.[0] || null }))} />
                       {formData.marriage_document_url && (
                         <a href={formData.marriage_document_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs">Lihat dokumen nikah yang sudah diupload</a>
@@ -619,18 +674,28 @@ export default function Residents() {
                 <form onSubmit={handleSubmit} className="space-y-4">
                   {formResidents.map((resident, idx) => (
                     <div key={idx} className="space-y-4">
+                      <div className="text-xs text-muted-foreground flex items-center gap-2">
+                        {resident.id ? (
+                          <Badge variant="outline">Akan diupdate</Badge>
+                        ) : (
+                          <Badge variant="default">Akan ditambahkan</Badge>
+                        )}
+                        {!resident.id && !(resident.full_name && resident.entry_date) && (
+                          <span className="text-[11px]">• Belum lengkap</span>
+                        )}
+                      </div>
                       <div className="space-y-2">
                         <Label>Nama Lengkap</Label>
-                        <Input value={resident.full_name} onChange={e => handleFormResidentChange(idx, "full_name", e.target.value)} required={idx === 0} />
+                        <Input value={resident.full_name} onChange={e => handleFormResidentChange(idx, "full_name", e.target.value)} required={!resident.id} />
                       </div>
                       <div className="space-y-2">
                         <Label>No. Telepon</Label>
-                        <Input value={resident.phone_number} onChange={e => handleFormResidentChange(idx, "phone_number", e.target.value)} required={idx === 0} />
+                        <Input value={resident.phone_number} onChange={e => handleFormResidentChange(idx, "phone_number", e.target.value)} />
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                         <div className="space-y-2">
                           <Label>Tanggal Masuk</Label>
-                          <Input type="date" value={resident.entry_date} onChange={e => handleFormResidentChange(idx, "entry_date", e.target.value)} required={idx === 0} />
+                          <Input type="date" value={resident.entry_date} onChange={e => handleFormResidentChange(idx, "entry_date", e.target.value)} required={!resident.id} />
                         </div>
                         <div className="space-y-2">
                           <Label>Status Pernikahan</Label>
@@ -646,12 +711,15 @@ export default function Residents() {
                         </div>
                       </div>
                       <div className="space-y-2 mt-2">
-                        <Label>Upload KTP</Label>
-                        <Input type="file" accept="image/*" onChange={e => handleFormResidentChange(idx, "ktp_file", e.target.files?.[0] || null)} />
+                        <Label className="flex items-center gap-2">Upload KTP {resident.ktp_image_url && (<Badge variant="secondary" className="text-[10px]">Sudah ada</Badge>)}</Label>
+                        <Input type="file" accept="image/*,.pdf" onChange={e => handleFormResidentChange(idx, "ktp_file", e.target.files?.[0] || null)} />
+                        {resident.ktp_image_url && (
+                          <a href={resident.ktp_image_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs">Lihat KTP yang sudah diupload</a>
+                        )}
                       </div>
                       {resident.marital_status === "Menikah" && (
                         <div className="space-y-2 mt-2">
-                          <Label>Upload Dokumen Nikah</Label>
+                          <Label className="flex items-center gap-2">Upload Dokumen Nikah {resident.marriage_document_url && (<Badge variant="secondary" className="text-[10px]">Sudah ada</Badge>)}</Label>
                           <Input type="file" accept="image/*,.pdf" onChange={e => handleFormResidentChange(idx, "marriage_file", e.target.files?.[0] || null)} />
                           {resident.marriage_document_url && (
                             <a href={resident.marriage_document_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs">Lihat dokumen nikah yang sudah diupload</a>
@@ -660,13 +728,26 @@ export default function Residents() {
                       )}
                     </div>
                   ))}
-                  <div className="flex justify-end space-x-2 pt-4">
-                    <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                      Batal
-                    </Button>
-                    <Button type="submit" disabled={isLoading || availableSlot === 0}>
-                      {isLoading ? "Menyimpan..." : "Simpan"}
-                    </Button>
+                  <div className="flex justify-between items-center pt-4">
+                    <div className="text-xs text-muted-foreground">
+                      {(() => {
+                        const willInsert = formResidents.filter(r => !r.id && r.full_name && r.entry_date).length;
+                        const willUpdate = formResidents.filter(r => !!r.id && r.full_name && r.entry_date).length;
+                        if (willInsert === 0 && willUpdate === 0) return <span>Tidak ada perubahan</span>;
+                        const parts: string[] = [];
+                        if (willInsert > 0) parts.push(`${willInsert} akan ditambahkan`);
+                        if (willUpdate > 0) parts.push(`${willUpdate} akan diupdate`);
+                        return <span>{parts.join(' • ')}</span>;
+                      })()}
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                        Batal
+                      </Button>
+                      <Button type="submit" disabled={isLoading || availableSlot === 0}>
+                        {isLoading ? "Menyimpan..." : "Simpan"}
+                      </Button>
+                    </div>
                   </div>
                 </form>
               )
@@ -813,13 +894,13 @@ export default function Residents() {
                 );
               })
               .slice()
-              .sort((a, b) => (a.rooms.room_number || 0) - (b.rooms.room_number || 0))
+              .sort((a, b) => ((a.rooms?.room_number ?? 0) - (b.rooms?.room_number ?? 0)))
               .map((resident) => (
                 <div key={resident.id} className="rounded-xl border border-muted p-3 bg-card text-card-foreground shadow-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate text-base font-semibold">{resident.full_name}</div>
-                      <div className="text-xs text-muted-foreground">Kamar {resident.rooms.room_number}</div>
+                      <div className="text-xs text-muted-foreground">Kamar {resident.rooms?.room_number ?? resident.room_id}</div>
                     </div>
                     <div className="text-right">
                       <a href={`tel:${resident.phone_number}`} className="block text-sm font-medium">{resident.phone_number}</a>
@@ -940,12 +1021,12 @@ export default function Residents() {
             <TableBody>
               {residents
                 .slice()
-                .sort((a, b) => (a.rooms.room_number || 0) - (b.rooms.room_number || 0))
+                .sort((a, b) => ((a.rooms?.room_number ?? 0) - (b.rooms?.room_number ?? 0)))
                 .map((resident) => (
                   <TableRow key={resident.id}>
                     <TableCell className="font-medium">{resident.full_name}</TableCell>
                     <TableCell>{resident.phone_number}</TableCell>
-                    <TableCell>Kamar {resident.rooms.room_number}</TableCell>
+                    <TableCell>Kamar {resident.rooms?.room_number ?? resident.room_id}</TableCell>
                     <TableCell>{format(new Date(resident.entry_date), "dd/MM/yyyy")}</TableCell>
                     <TableCell>
                       <Badge variant={resident.marital_status === 'Menikah' ? "default" : "secondary"}>
