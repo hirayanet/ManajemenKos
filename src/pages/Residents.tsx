@@ -510,7 +510,7 @@ export default function Residents() {
               Tambah Penghuni
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[700px]">
+          <DialogContent className="w-[95vw] sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{selectedResident ? "Edit Penghuni" : "Tambah Penghuni Baru"}</DialogTitle>
               {isLoading && (
