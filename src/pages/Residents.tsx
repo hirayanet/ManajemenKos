@@ -128,10 +128,12 @@ export default function Residents() {
         .order("created_at", { ascending: false });
   
       if (error) throw error;
-      // Normalisasi status: gunakan status_penghuni, jika null gunakan is_active
+      // Normalisasi status penghuni dan marital_status
       const normalized = (data || []).map((r: any) => {
         const status = r.status_penghuni ?? (r.is_active ? "Aktif" : "Sudah Keluar");
-        return { ...r, status_penghuni: status } as Resident;
+        const maritalRaw = (r.marital_status ?? "Lajang").toString().trim().toLowerCase();
+        const maritalStd = maritalRaw.startsWith("menikah") ? "Menikah" : "Lajang";
+        return { ...r, status_penghuni: status, marital_status: maritalStd } as Resident;
       });
 
       // Terapkan filter di client agar data yang status_penghuni null tetap muncul benar
@@ -378,6 +380,11 @@ export default function Residents() {
           const imageUrl = await uploadKtpImage(r.ktp_file, newResident.id);
           await supabase.from("residents").update({ ktp_image_url: imageUrl }).eq("id", newResident.id);
         }
+        // Upload dokumen nikah jika status menikah dan ada file
+        if (r.marital_status === "Menikah" && r.marriage_file && newResident) {
+          const docUrl = await uploadMarriageDocument(r.marriage_file, newResident.id);
+          await supabase.from("residents").update({ marriage_document_url: docUrl }).eq("id", newResident.id);
+        }
       }
       toast({ title: "Berhasil", description: `${filled.length} penghuni berhasil ditambahkan` });
       setIsDialogOpen(false);
@@ -419,15 +426,19 @@ export default function Residents() {
     const roomNumber = resident.rooms?.room_number || 0;
     if (roomNumber >= 1 && roomNumber <= 6) {
       setEditMode("single");
+      const maritalRaw = (resident.marital_status || "Lajang").toString().trim().toLowerCase();
+      const maritalStd = maritalRaw.startsWith("menikah") ? "Menikah" : "Lajang";
       setFormData({
         full_name: resident.full_name,
         phone_number: resident.phone_number,
         room_id: resident.room_id.toString(),
         entry_date: resident.entry_date,
         is_active: resident.is_active,
-        marital_status: resident.marital_status || "Lajang",
+        marital_status: maritalStd,
         status_penghuni: resident.status_penghuni || "Aktif",
         tanggal_keluar: resident.tanggal_keluar || "",
+        ktp_image_url: resident.ktp_image_url,
+        marriage_document_url: resident.marriage_document_url,
       });
     } else if (roomNumber >= 7 && roomNumber <= 15) {
       setEditMode("multi");
@@ -439,7 +450,7 @@ export default function Residents() {
         phone_number: r.phone_number,
         entry_date: r.entry_date,
         ktp_file: null,
-        marital_status: r.marital_status || "Lajang",
+        marital_status: ((r.marital_status || "Lajang").toString().trim().toLowerCase().startsWith("menikah")) ? "Menikah" : "Lajang",
         ktp_image_url: r.ktp_image_url,
         marriage_file: null,
         marriage_document_url: r.marriage_document_url,
@@ -638,6 +649,15 @@ export default function Residents() {
                         <Label>Upload KTP</Label>
                         <Input type="file" accept="image/*" onChange={e => handleFormResidentChange(idx, "ktp_file", e.target.files?.[0] || null)} />
                       </div>
+                      {resident.marital_status === "Menikah" && (
+                        <div className="space-y-2 mt-2">
+                          <Label>Upload Dokumen Nikah</Label>
+                          <Input type="file" accept="image/*,.pdf" onChange={e => handleFormResidentChange(idx, "marriage_file", e.target.files?.[0] || null)} />
+                          {resident.marriage_document_url && (
+                            <a href={resident.marriage_document_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs">Lihat dokumen nikah yang sudah diupload</a>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                   <div className="flex justify-end space-x-2 pt-4">
