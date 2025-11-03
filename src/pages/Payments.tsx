@@ -166,15 +166,27 @@ export default function Payments() {
       ];
       const currentMonthName = months[currentMonth];
 
-      // Ambil semua pembayaran bulan berjalan
+      // Ambil semua pembayaran bulan berjalan beserta nomor kamar dari relasi resident -> rooms
       const { data: paymentsThisMonth, error: paymentsError } = await supabase
         .from("payments")
-        .select("resident_id, payment_month, payment_date")
+        .select(`
+          resident_id,
+          payment_month,
+          payment_date,
+          residents (
+            rooms ( room_number )
+          )
+        `)
         .eq("payment_month", currentMonthName)
         .filter('payment_date', 'gte', `${currentYear}-01-01`); // Pastikan tahun sama
 
       if (paymentsError) throw paymentsError;
-      const paidResidentIds = (paymentsThisMonth || []).map((p: any) => p.resident_id);
+      // Kumpulkan nomor kamar yang sudah memiliki pembayaran bulan berjalan
+      const paidRoomNumbers = new Set(
+        (paymentsThisMonth || [])
+          .map((p: any) => p?.residents?.rooms?.room_number)
+          .filter((n: any) => n !== null && n !== undefined)
+      );
 
       // Ambil penghuni aktif yang BELUM membayar bulan ini
       const { data, error } = await supabase
@@ -189,9 +201,9 @@ export default function Payments() {
         .order("full_name");
 
       if (error) throw error;
-      // Filter agar hanya yang belum ada di paidResidentIds dan urutkan berdasarkan room_number
+      // Filter agar seluruh penghuni yang kamarnya sudah bayar bulan ini tidak tampil
       const filtered = (data || [])
-        .filter((r: any) => !paidResidentIds.includes(r.id))
+        .filter((r: any) => !paidRoomNumbers.has(r?.rooms?.room_number))
         .sort((a: any, b: any) => (a.rooms?.room_number || 0) - (b.rooms?.room_number || 0));
       setResidents(filtered);
     } catch (error) {
@@ -305,6 +317,8 @@ export default function Payments() {
       setIsDialogOpen(false);
       resetForm();
       fetchPayments(0);
+      // Refresh daftar penghuni agar kamar yang sudah membayar bulan ini tersembunyi
+      fetchResidents();
     } catch (error) {
       toast({
         title: "Error",
