@@ -83,7 +83,7 @@ const Login = () => {
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@kosan.com"
+                placeholder="admin@yahoo.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -119,11 +119,7 @@ const Login = () => {
               {loading ? "Masuk..." : "Masuk"}
             </Button>
           </form>
-          <div className="mt-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              Demo: email: admin@kosan.com, password: admin123
-            </p>
-          </div>
+          
         </CardContent>
       </Card>
     </div>
