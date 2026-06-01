@@ -10,7 +10,7 @@ export async function uploadPDFtoSupabase(file: File | Blob, fileName: string): 
   const { data, error } = await supabase.storage
     .from("kwitansi") // bucket "kwitansi" harus sudah ada di Supabase Storage
     .upload(fileName, file, {
-      cacheControl: "3600",
+      cacheControl: "0",
       upsert: true,
       contentType: "application/pdf"
     });

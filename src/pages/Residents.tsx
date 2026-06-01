@@ -143,6 +143,7 @@ export default function Residents() {
         : normalized.filter((r: Resident) => r.status_penghuni === statusFilter);
 
       setResidents(filtered);
+
       // Hitung occupancy
       const occ: { [roomId: number]: number } = {};
       normalized.forEach((r: Resident) => {
@@ -321,6 +322,20 @@ export default function Residents() {
     setMaxSlot(1);
     setAvailableSlot(1);
     setSelectedResident(null);
+    setFormData({
+      full_name: "",
+      phone_number: "",
+      room_id: "",
+      entry_date: "",
+      is_active: true,
+      marital_status: "Lajang",
+      status_penghuni: "Aktif",
+      tanggal_keluar: "",
+      ktp_file: null,
+      marriage_file: null,
+      ktp_image_url: undefined,
+      marriage_document_url: undefined,
+    });
   };
 
   // Saat memilih kamar, tentukan kapasitas dan slot kosong

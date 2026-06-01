@@ -89,33 +89,20 @@ export default function Payments() {
     "Juli", "Agustus", "September", "Oktober", "November", "Desember"
   ];
 
+  const [filterMonth, setFilterMonth] = useState<string>(months[new Date().getMonth()]);
+  const [filterYear, setFilterYear] = useState<string>(new Date().getFullYear().toString());
+
   useEffect(() => {
     fetchPayments(0);
-  }, []);
+  }, [filterMonth, filterYear]);
 
   const fetchPayments = async (targetPage: number) => {
     try {
       // Skeleton only for first page; otherwise use loadingMore state
       if (targetPage === 0) setLoadingPayments(true);
       if (targetPage > 0) setLoadingMore(true);
-      // Ambil tanggal hari ini
-      const today = new Date();
-      // Jika tanggal 1 jam 00:00-00:01, reset tampilan (tidak ada data)
-      if (
-        today.getDate() === 1 &&
-        today.getHours() === 0 &&
-        today.getMinutes() <= 1
-      ) {
-        return;
-      }
-      // Hitung awal dan akhir bulan berjalan
-      const month = today.getMonth() + 1;
-      const year = today.getFullYear();
-      const startDate = `${year}-${month.toString().padStart(2, "0")}-01`;
-      // Akhir bulan = tanggal 1 bulan berikutnya - 1 hari
-      const endDateObj = new Date(year, month, 0);
-      const endDate = `${year}-${month.toString().padStart(2, "0")}-${endDateObj.getDate().toString().padStart(2, "0")}`;
-      const { data, error } = await supabase
+
+      let query = supabase
         .from("payments")
         .select(`
           *,
@@ -124,9 +111,19 @@ export default function Payments() {
             rooms (room_number),
             entry_date
           )
-        `)
-        .gte("payment_date", startDate)
-        .lte("payment_date", endDate)
+        `);
+
+      if (filterMonth !== "Semua") {
+        query = query.eq("payment_month", filterMonth);
+      }
+
+      // Filter by the selected year based on payment_date
+      const startOfYear = `${filterYear}-01-01`;
+      const endOfYear = `${filterYear}-12-31`;
+
+      const { data, error } = await query
+        .gte("payment_date", startOfYear)
+        .lte("payment_date", endOfYear)
         .order("created_at", { ascending: false })
         .range(targetPage * pageSize, targetPage * pageSize + pageSize - 1);
 
@@ -225,6 +222,7 @@ export default function Payments() {
       logoBase64: logoImg,
       kamar: payment.residents.rooms?.room_number ? `Kamar ${payment.residents.rooms.room_number}` : '',
       metodePembayaran: payment.payment_method,
+      bulanSewa: payment.payment_month,
     });
     doc.save(`kwitansi-${payment.residents.full_name}-${payment.payment_date}.pdf`);
   };
@@ -248,6 +246,7 @@ export default function Payments() {
         logoBase64: logoImg,
         kamar: payment.residents.rooms?.room_number ? `Kamar ${payment.residents.rooms.room_number}` : '',
         metodePembayaran: payment.payment_method,
+        bulanSewa: payment.payment_month,
       });
       if (!doc) {
         throw new Error('Gagal generate dokumen PDF');
@@ -256,7 +255,7 @@ export default function Payments() {
       if (!blob) {
         throw new Error('Gagal konversi PDF ke blob');
       }
-      const fileName = `kwitansi-${payment.residents.full_name.replace(/\s+/g, "_")}-${payment.payment_date}.pdf`;
+      const fileName = `kwitansi-${payment.residents.full_name.replace(/\s+/g, "_")}-${payment.payment_date}-${format(new Date(), 'HHmmss')}.pdf`;
       const url = await uploadPDFtoSupabase(blob, fileName);
       if (url) {
         setShareUrl(url);
@@ -392,15 +391,50 @@ export default function Payments() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-foreground">Data Pembayaran</h1>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openAddDialog} className="bg-primary hover:bg-primary/90">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Tambah Pembayaran
-            </Button>
-          </DialogTrigger>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Data Pembayaran</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Menampilkan data pembayaran berdasarkan bulan sewa
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="w-45">
+            <Select value={filterMonth} onValueChange={setFilterMonth}>
+              <SelectTrigger>
+                <SelectValue placeholder="Pilih Bulan" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Semua">Semua Bulan</SelectItem>
+                {months.map((month) => (
+                  <SelectItem key={month} value={month}>
+                    {month}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-32">
+            <Select value={filterYear} onValueChange={setFilterYear}>
+              <SelectTrigger>
+                <SelectValue placeholder="Pilih Tahun" />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - i).toString()).map((year) => (
+                  <SelectItem key={year} value={year}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={openAddDialog} className="bg-primary hover:bg-primary/90">
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Tambah Pembayaran
+              </Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>
@@ -419,21 +453,34 @@ export default function Payments() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="resident_id">Penghuni</Label>
-                <Select 
-                  value={formData.resident_id} 
-                  onValueChange={(value) => setFormData({ ...formData, resident_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih penghuni" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {residents.map((resident) => (
-                      <SelectItem key={resident.id} value={resident.id}>
-                        {resident.full_name} - Kamar {resident.rooms.room_number}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {selectedPayment ? (
+                  <Input
+                    id="resident_name"
+                    value={
+                      selectedPayment.residents
+                        ? `${selectedPayment.residents.full_name} - Kamar ${selectedPayment.residents.rooms?.room_number || "-"}`
+                        : "Tidak Diketahui"
+                    }
+                    disabled
+                    className="bg-muted text-muted-foreground cursor-not-allowed"
+                  />
+                ) : (
+                  <Select 
+                    value={formData.resident_id} 
+                    onValueChange={(value) => setFormData({ ...formData, resident_id: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih penghuni" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {residents.map((resident) => (
+                        <SelectItem key={resident.id} value={resident.id}>
+                          {resident.full_name} - Kamar {resident.rooms.room_number}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -510,6 +557,7 @@ export default function Payments() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <Card>
@@ -579,6 +627,9 @@ export default function Payments() {
                       onClick={() => setKwitansiSheetPayment(payment)}
                     >
                       <Receipt className="h-4 w-4 mr-1" /> Kwitansi
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => openEditDialog(payment)}>
+                      <Edit className="h-4 w-4" />
                     </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
@@ -670,6 +721,9 @@ export default function Payments() {
     </DropdownMenuItem>
   </DropdownMenuContent>
 </DropdownMenu>
+                        <Button variant="outline" size="sm" onClick={() => openEditDialog(payment)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="outline" size="sm">

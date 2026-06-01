@@ -17,7 +17,8 @@ export function generateKwitansiPDF({
   tanggal,
   logoBase64,
   kamar,
-  metodePembayaran
+  metodePembayaran,
+  bulanSewa
 }: {
   namaPenyewa: string;
   tanggalMasuk: string; // format yyyy-mm-dd
@@ -26,6 +27,7 @@ export function generateKwitansiPDF({
   logoBase64: string;
   kamar: string;
   metodePembayaran: string;
+  bulanSewa?: string;
 }): { doc: jsPDF, periodeSewa: string } {
   const doc = new jsPDF();
 
@@ -66,11 +68,30 @@ export function generateKwitansiPDF({
     ) {
       throw new Error('Tanggal tidak valid');
     }
-    // Periode selalu berdasarkan tanggal masuk sebagai acuan
-    // Tanggal mulai = tanggal masuk di bulan pembayaran
-    const mulai = new Date(bayar.getFullYear(), bayar.getMonth(), masuk.getDate());
-    // Tanggal akhir = tanggal masuk di bulan berikutnya
-    const akhir = new Date(bayar.getFullYear(), bayar.getMonth() + 1, masuk.getDate());
+
+    const monthsMap: { [key: string]: number } = {
+      "Januari": 0, "Februari": 1, "Maret": 2, "April": 3, "Mei": 4, "Juni": 5,
+      "Juli": 6, "Agustus": 7, "September": 8, "Oktober": 9, "November": 10, "Desember": 11
+    };
+
+    const rentMonth = (bulanSewa && monthsMap[bulanSewa] !== undefined) 
+      ? monthsMap[bulanSewa] 
+      : bayar.getMonth();
+
+    let rentYear = bayar.getFullYear();
+    // Jika bayar di Desember tapi untuk Januari, tahun sewa maju 1 tahun
+    if (bayar.getMonth() === 11 && rentMonth === 0) {
+      rentYear += 1;
+    }
+    // Jika bayar di Januari tapi untuk Desember, tahun sewa mundur 1 tahun
+    else if (bayar.getMonth() === 0 && rentMonth === 11) {
+      rentYear -= 1;
+    }
+
+    // Periode sewa berdasarkan bulan sewa (rentMonth) dan tanggal masuk sebagai acuan tanggal
+    const mulai = new Date(rentYear, rentMonth, masuk.getDate());
+    const akhir = new Date(rentYear, rentMonth + 1, masuk.getDate());
+
     // Format tanggal: 5 Agustus 2025
     const formatTanggal = (tgl: Date) => tgl.getDate() + ' ' + tgl.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
     periodeSewa = `${formatTanggal(mulai)} - ${formatTanggal(akhir)}`;
