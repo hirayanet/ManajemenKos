@@ -15,6 +15,7 @@ import Expenses from "./pages/Expenses";
 import AuthGuard from "./components/AuthGuard";
 // Import halaman ResidentHistory
 import ResidentHistory from "./pages/ResidentHistory";
+import DPReservasi from "./pages/DPReservasi";
 
 const queryClient = new QueryClient();
 
@@ -63,6 +64,13 @@ const App = () => (
             </AuthGuard>
           } />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="/dp-reservasi" element={
+            <AuthGuard>
+              <Layout>
+                <DPReservasi />
+              </Layout>
+            </AuthGuard>
+          } />
           <Route path="/resident-history" element={
             <AuthGuard>
               <Layout>

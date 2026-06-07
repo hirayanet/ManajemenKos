@@ -26,6 +26,16 @@ import jsPDF from "jspdf";
 import logoImg from '../assets/hr_logo_base64'; // (Pastikan file ini ada dan berisi string base64 logo Anda)
 import { generateKwitansiPDF } from '../lib/kwitansiPDF';
 
+// Harga kamar tetap
+const ROOM_PRICES: Record<number, number> = {
+  1: 1275000, 2: 1275000, 3: 1275000, 4: 1275000, 5: 1275000, 6: 1275000,
+  7: 1575000,
+  8: 1375000, 10: 1375000, 11: 1375000, 12: 1375000, 13: 1375000, 15: 1375000,
+  9: 1575000, 14: 1575000,
+};
+
+const getRoomPrice = (roomNumber: number): number => ROOM_PRICES[roomNumber] ?? 0;
+
 interface Resident {
   id: string;
   full_name: string;
@@ -467,7 +477,13 @@ export default function Payments() {
                 ) : (
                   <Select 
                     value={formData.resident_id} 
-                    onValueChange={(value) => setFormData({ ...formData, resident_id: value })}
+                    onValueChange={(value) => {
+                      const selectedResident = residents.find(r => r.id === value);
+                      const autoAmount = selectedResident
+                        ? getRoomPrice(selectedResident.rooms.room_number).toString()
+                        : "";
+                      setFormData({ ...formData, resident_id: value, amount: autoAmount });
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Pilih penghuni" />
@@ -476,6 +492,11 @@ export default function Payments() {
                       {residents.map((resident) => (
                         <SelectItem key={resident.id} value={resident.id}>
                           {resident.full_name} - Kamar {resident.rooms.room_number}
+                          {getRoomPrice(resident.rooms.room_number) > 0 && (
+                            <span className="ml-1 text-muted-foreground">
+                              (Rp {getRoomPrice(resident.rooms.room_number).toLocaleString("id-ID")})
+                            </span>
+                          )}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -516,7 +537,12 @@ export default function Payments() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="amount">Jumlah</Label>
+                  <Label htmlFor="amount">
+                    Jumlah
+                    {formData.amount && !selectedPayment && (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">(otomatis dari kamar)</span>
+                    )}
+                  </Label>
                   <Input
                     id="amount"
                     type="number"

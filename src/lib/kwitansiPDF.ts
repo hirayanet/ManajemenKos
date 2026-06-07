@@ -38,7 +38,7 @@ export function generateKwitansiPDF({
 
   // Header
   doc.setFontSize(18);
-  doc.text('BUKTI PEMBAYARAN KOST', 105, 22, { align: 'center' });
+  doc.text('BUKTI PEMBAYARAN HIRAYA KOST', 105, 22, { align: 'center' });
 
   // Alamat dan kontak
   doc.setFontSize(10);

@@ -1,4 +1,4 @@
-import { Home, Users, CreditCard, FileText, LogOut } from "lucide-react";
+import { Home, Users, CreditCard, FileText, LogOut, Banknote } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   Sidebar,
@@ -21,6 +21,7 @@ import { History } from "lucide-react";
 const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
   { title: "Data Penghuni", url: "/residents", icon: Users },
+  { title: "Reservasi DP", url: "/dp-reservasi", icon: Banknote },
   { title: "Pembayaran", url: "/payments", icon: CreditCard },
   { title: "Pengeluaran", url: "/expenses", icon: FileText },
   { title: "Laporan", url: "/reports", icon: FileText },
