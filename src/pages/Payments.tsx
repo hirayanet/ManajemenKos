@@ -230,7 +230,7 @@ export default function Payments() {
       nominal: `Rp ${payment.amount.toLocaleString('id-ID')}`,
       tanggal: payment.payment_date,
       logoBase64: logoImg,
-      kamar: payment.residents.rooms?.room_number ? `Kamar ${payment.residents.rooms.room_number}` : '',
+      kamar: payment.residents.rooms?.room_number ? payment.residents.rooms.room_number.toString() : '',
       metodePembayaran: payment.payment_method,
       bulanSewa: payment.payment_month,
     });
@@ -254,7 +254,7 @@ export default function Payments() {
         nominal: `Rp ${payment.amount.toLocaleString('id-ID')}`,
         tanggal: payment.payment_date,
         logoBase64: logoImg,
-        kamar: payment.residents.rooms?.room_number ? `Kamar ${payment.residents.rooms.room_number}` : '',
+        kamar: payment.residents.rooms?.room_number ? payment.residents.rooms.room_number.toString() : '',
         metodePembayaran: payment.payment_method,
         bulanSewa: payment.payment_month,
       });

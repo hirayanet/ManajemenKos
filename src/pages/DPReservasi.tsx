@@ -371,7 +371,7 @@ export default function DPReservasi() {
   const handleKwitansiDP = async (reservasi: DPReservasi, mode: "download" | "share") => {
     const { doc } = generateKwitansiDPPDF({
       namaCalon: reservasi.nama_calon,
-      kamar: `Kamar ${reservasi.rooms?.room_number}`,
+      kamar: reservasi.rooms?.room_number ? reservasi.rooms.room_number.toString() : "",
       nominalDP: formatRupiah(reservasi.nominal_dp),
       sisaPelunasan: formatRupiah(reservasi.nominal_pelunasan),
       totalHarga: formatRupiah(reservasi.harga_per_bulan),
@@ -400,7 +400,7 @@ export default function DPReservasi() {
       const shareText =
         `Berikut bukti Down Payment (DP) kost untuk:\n\n` +
         `Nama: ${reservasi.nama_calon}\n` +
-        `Kamar: Kamar ${reservasi.rooms?.room_number}\n` +
+        `Kamar: ${reservasi.rooms?.room_number || "-"}\n` +
         `Nominal DP: ${formatRupiah(reservasi.nominal_dp)}\n` +
         `Sisa Pelunasan: ${formatRupiah(reservasi.nominal_pelunasan)}\n` +
         `Deadline Pelunasan: ${deadlineFormatted}\n\n` +
@@ -424,7 +424,7 @@ export default function DPReservasi() {
 
     const { doc, periodeSewa } = generateKwitansiPelunasanPDF({
       namaPenyewa: reservasi.nama_calon,
-      kamar: `Kamar ${reservasi.rooms?.room_number}`,
+      kamar: reservasi.rooms?.room_number ? reservasi.rooms.room_number.toString() : "",
       nominalDP: formatRupiah(reservasi.nominal_dp),
       nominalPelunasan: formatRupiah(reservasi.nominal_pelunasan),
       totalHarga: formatRupiah(reservasi.harga_per_bulan),
@@ -453,7 +453,7 @@ export default function DPReservasi() {
       const shareText =
         `Berikut kwitansi pelunasan kost untuk periode: *${periodeSewa}*\n\n` +
         `Nama: ${reservasi.nama_calon}\n` +
-        `Kamar: Kamar ${reservasi.rooms?.room_number}\n` +
+        `Kamar: ${reservasi.rooms?.room_number || "-"}\n` +
         `DP Sebelumnya: ${formatRupiah(reservasi.nominal_dp)}\n` +
         `Pelunasan: ${formatRupiah(reservasi.nominal_pelunasan)}\n` +
         `Total: ${formatRupiah(reservasi.harga_per_bulan)}\n` +
