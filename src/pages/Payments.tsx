@@ -79,12 +79,23 @@ export default function Payments() {
   const isMobile = useIsMobile();
   const [kwitansiSheetPayment, setKwitansiSheetPayment] = useState<Payment | null>(null);
 
-  const [formData, setFormData] = useState({
+  const months = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+  ];
+
+  const [formData, setFormData] = useState<{
+    resident_id: string;
+    amount: string;
+    payment_method: string;
+    payment_date: string;
+    payment_month: string;
+  }>({
     resident_id: "",
-    payment_date: "",
-    payment_month: "",
     amount: "",
-    payment_method: "",
+    payment_method: "Transfer Bank",
+    payment_date: new Date().toISOString().split("T")[0],
+    payment_month: months[new Date().getMonth()],
   });
 
   const paymentMethods = [
@@ -92,11 +103,6 @@ export default function Payments() {
     "Transfer Bank",
     "E-Wallet",
     "Kartu Debit",
-  ];
-
-  const months = [
-    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
   ];
 
   const [filterMonth, setFilterMonth] = useState<string>(months[new Date().getMonth()]);
@@ -366,10 +372,10 @@ export default function Payments() {
   const resetForm = () => {
     setFormData({
       resident_id: "",
-      payment_date: "",
-      payment_month: "",
       amount: "",
-      payment_method: "",
+      payment_method: "Transfer Bank",
+      payment_date: new Date().toISOString().split("T")[0],
+      payment_month: months[new Date().getMonth()],
     });
     setSelectedPayment(null);
   };
