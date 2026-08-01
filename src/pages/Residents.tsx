@@ -169,45 +169,75 @@ export default function Residents() {
         setIsLoading(false);
         return;
       }
-      if (availableSlot === 0) {
+      if (!selectedResident && availableSlot === 0) {
         toast({ title: "Penuh", description: "Kamar ini sudah penuh. Silakan pilih kamar lain.", variant: "destructive" });
         setIsLoading(false);
         return;
       }
-      if (!formData.full_name || !formData.phone_number || !formData.entry_date) {
-        toast({ title: "Error", description: "Nama, No. Telepon, dan Tanggal Masuk wajib diisi", variant: "destructive" });
+      if (!formData.full_name || !formData.entry_date) {
+        toast({ title: "Error", description: "Nama dan Tanggal Masuk wajib diisi", variant: "destructive" });
         setIsLoading(false);
         return;
       }
 
-      const { data: newResident, error } = await supabase
-        .from("residents")
-        .insert({
-          full_name: formData.full_name,
-          phone_number: formData.phone_number,
-          room_id: parseInt(selectedRoomId),
-          entry_date: formData.entry_date,
-          is_active: true,
-          marital_status: formData.marital_status,
-          status_penghuni: "Aktif",
-        })
-        .select()
-        .single();
+      const phoneVal = (formData.phone_number && formData.phone_number.trim().length > 0) ? formData.phone_number.trim() : null;
 
-      if (error) throw error;
+      if (selectedResident) {
+        // UPDATE existing resident
+        const { error: updErr } = await supabase
+          .from("residents")
+          .update({
+            full_name: formData.full_name,
+            phone_number: phoneVal,
+            room_id: parseInt(selectedRoomId),
+            entry_date: formData.entry_date,
+            marital_status: formData.marital_status,
+          })
+          .eq("id", selectedResident.id);
 
-      // Upload KTP jika ada
-      if (formData.ktp_file && newResident) {
-        const imageUrl = await uploadKtpImage(formData.ktp_file, newResident.id);
-        await supabase.from("residents").update({ ktp_image_url: imageUrl }).eq("id", newResident.id);
+        if (updErr) throw updErr;
+
+        if (formData.ktp_file) {
+          const imageUrl = await uploadKtpImage(formData.ktp_file, selectedResident.id);
+          await supabase.from("residents").update({ ktp_image_url: imageUrl }).eq("id", selectedResident.id);
+        }
+        if (formData.marital_status === "Menikah" && formData.marriage_file) {
+          const docUrl = await uploadMarriageDocument(formData.marriage_file, selectedResident.id);
+          await supabase.from("residents").update({ marriage_document_url: docUrl }).eq("id", selectedResident.id);
+        }
+
+        toast({ title: "Berhasil", description: "Data penghuni berhasil diperbarui" });
+      } else {
+        // INSERT new resident
+        const { data: newResident, error } = await supabase
+          .from("residents")
+          .insert({
+            full_name: formData.full_name,
+            phone_number: phoneVal,
+            room_id: parseInt(selectedRoomId),
+            entry_date: formData.entry_date,
+            is_active: true,
+            marital_status: formData.marital_status,
+            status_penghuni: "Aktif",
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        // Upload KTP jika ada
+        if (formData.ktp_file && newResident) {
+          const imageUrl = await uploadKtpImage(formData.ktp_file, newResident.id);
+          await supabase.from("residents").update({ ktp_image_url: imageUrl }).eq("id", newResident.id);
+        }
+        // Upload dokumen nikah jika ada dan status menikah
+        if (formData.marital_status === "Menikah" && formData.marriage_file && newResident) {
+          const docUrl = await uploadMarriageDocument(formData.marriage_file, newResident.id);
+          await supabase.from("residents").update({ marriage_document_url: docUrl }).eq("id", newResident.id);
+        }
+
+        toast({ title: "Berhasil", description: "Penghuni berhasil ditambahkan" });
       }
-      // Upload dokumen nikah jika ada dan status menikah
-      if (formData.marital_status === "Menikah" && formData.marriage_file && newResident) {
-        const docUrl = await uploadMarriageDocument(formData.marriage_file, newResident.id);
-        await supabase.from("residents").update({ marriage_document_url: docUrl }).eq("id", newResident.id);
-      }
-
-      toast({ title: "Berhasil", description: "Penghuni berhasil ditambahkan" });
       setIsDialogOpen(false);
       resetForm();
       fetchResidents();
@@ -369,6 +399,14 @@ export default function Residents() {
     try {
       // Validasi minimal 1 blok terisi (untuk penambahan baru, no HP tidak wajib)
       const filled = formResidents.filter(r => r.full_name && r.entry_date);
+      
+      const partialFilled = formResidents.some(r => (r.full_name && !r.entry_date) || (!r.full_name && r.entry_date));
+      if (partialFilled) {
+        toast({ title: "Error", description: "Pastikan Nama dan Tanggal Masuk terisi lengkap pada form yang sedang Anda isi", variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
+
       if (filled.length === 0) {
         toast({ title: "Error", description: "Minimal 1 penghuni harus diisi", variant: "destructive" });
         setIsLoading(false);
@@ -512,7 +550,7 @@ export default function Residents() {
       setEditMode("multi");
       // Ambil semua penghuni di kamar tersebut
       const penghuniKamar = residents.filter(r => r.room_id === resident.room_id);
-      // Jika penghuni < 2, tambahkan blok kosong untuk slot yang masih tersedia
+      
       const blocks: FormResidentType[] = [...penghuniKamar.map(r => ({
         id: r.id,
         full_name: r.full_name,
@@ -524,19 +562,7 @@ export default function Residents() {
         marriage_file: null,
         marriage_document_url: r.marriage_document_url,
       }))];
-      if (blocks.length < 2) {
-        blocks.push({
-          id: undefined,
-          full_name: "",
-          phone_number: "",
-          entry_date: "",
-          ktp_file: null,
-          marital_status: "Lajang",
-          ktp_image_url: undefined,
-          marriage_file: null,
-          marriage_document_url: undefined,
-        });
-      }
+      
       setFormResidents(blocks);
       setSelectedRoomId(resident.room_id.toString());
       setMaxSlot(2);
@@ -701,7 +727,7 @@ export default function Residents() {
                       </div>
                       <div className="space-y-2">
                         <Label>Nama Lengkap</Label>
-                        <Input value={resident.full_name} onChange={e => handleFormResidentChange(idx, "full_name", e.target.value)} required={!resident.id} />
+                        <Input value={resident.full_name} onChange={e => handleFormResidentChange(idx, "full_name", e.target.value)} />
                       </div>
                       <div className="space-y-2">
                         <Label>No. Telepon</Label>
@@ -710,7 +736,7 @@ export default function Residents() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                         <div className="space-y-2">
                           <Label>Tanggal Masuk</Label>
-                          <Input type="date" value={resident.entry_date} onChange={e => handleFormResidentChange(idx, "entry_date", e.target.value)} required={!resident.id} />
+                          <Input type="date" value={resident.entry_date} onChange={e => handleFormResidentChange(idx, "entry_date", e.target.value)} />
                         </div>
                         <div className="space-y-2">
                           <Label>Status Pernikahan</Label>
@@ -743,6 +769,30 @@ export default function Residents() {
                       )}
                     </div>
                   ))}
+                  
+                  {formResidents.length < maxSlot && (
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      className="w-full mt-4 border-dashed"
+                      onClick={() => {
+                        setFormResidents([...formResidents, {
+                          id: undefined,
+                          full_name: "",
+                          phone_number: "",
+                          entry_date: "",
+                          ktp_file: null,
+                          marital_status: "Lajang",
+                          ktp_image_url: undefined,
+                          marriage_file: null,
+                          marriage_document_url: undefined,
+                        }]);
+                      }}
+                    >
+                      <PlusCircle className="w-4 h-4 mr-2" /> Tambah Penghuni Sekamar (Slot 2)
+                    </Button>
+                  )}
+                  
                   <div className="flex justify-between items-center pt-4">
                     <div className="text-xs text-muted-foreground">
                       {(() => {
