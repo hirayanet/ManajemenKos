@@ -98,6 +98,9 @@ export default function Payments() {
     payment_date: new Date().toISOString().split("T")[0],
     payment_month: months[new Date().getMonth()],
   });
+  const [paymentType, setPaymentType] = useState<"bulanan" | "harian">("bulanan");
+  const [dailyRate, setDailyRate] = useState("");
+  const [numDays, setNumDays] = useState("");
 
   const paymentMethods = [
     "Tunai",
@@ -278,12 +281,34 @@ export default function Payments() {
       // Build the viewer page URL
       const baseUrl = window.location.origin;
       const viewerUrl = `${baseUrl}/kwitansi/${payment.id}`;
-      const periodeSewa = payment.payment_month;
+
+      // Calculate period — daily uses stored text, monthly calculates date range
+      let periodeSewa = payment.payment_month;
+      const isDaily = payment.payment_month.startsWith("Harian");
+      if (!isDaily) {
+        const monthsMap: Record<string, number> = {
+          "Januari": 0, "Februari": 1, "Maret": 2, "April": 3, "Mei": 4, "Juni": 5,
+          "Juli": 6, "Agustus": 7, "September": 8, "Oktober": 9, "November": 10, "Desember": 11
+        };
+        try {
+          const entryParts = payment.residents.entry_date.split('-').map(Number);
+          const entryDay = entryParts[2];
+          const rentMonth = monthsMap[payment.payment_month] ?? new Date().getMonth();
+          let rentYear = new Date().getFullYear();
+          const now = new Date();
+          if (now.getMonth() === 11 && rentMonth === 0) rentYear += 1;
+          else if (now.getMonth() === 0 && rentMonth === 11) rentYear -= 1;
+          const startDate = new Date(rentYear, rentMonth, entryDay);
+          const endDate = new Date(rentYear, rentMonth + 1, entryDay);
+          const fmt = (d: Date) => `${d.getDate()} ${d.toLocaleString('id-ID', { month: 'long' })} ${d.getFullYear()}`;
+          periodeSewa = `${fmt(startDate)} - ${fmt(endDate)}`;
+        } catch {}
+      }
 
       setShareUrl(viewerUrl);
       await supabase.from('payments').update({ receipt_url: viewerUrl }).eq('id', payment.id);
 
-      const shareText = `Berikut kwitansi pembayaran sewa kos untuk periode: *${periodeSewa}*\n\nNama: ${payment.residents.full_name}\nKamar: ${payment.residents.rooms?.room_number || "-"}\nNominal: Rp ${payment.amount.toLocaleString('id-ID')}\nMetode Pembayaran: ${payment.payment_method}\nTanggal Bayar: ${format(new Date(payment.payment_date), 'dd MMMM yyyy', { locale: undefined })}\n\nSilakan klik link berikut untuk melihat kwitansi:\n${viewerUrl}\n\nTerima kasih telah melakukan pembayaran tepat waktu.\nSalam,\nPengelola Kos`;
+      const shareText = `Berikut kwitansi pembayaran sewa kos untuk periode:\n*${periodeSewa}*\n\n🏠 Nama: ${payment.residents.full_name}\n🚪 Kamar: ${payment.residents.rooms?.room_number || "-"}\n💰 Nominal: Rp ${payment.amount.toLocaleString('id-ID')}\n💳 Metode Pembayaran: ${payment.payment_method}\n📆 Tanggal Bayar: ${format(new Date(payment.payment_date), 'dd MMMM yyyy', { locale: undefined })}\n\nSilakan klik link berikut untuk melihat kwitansi:\n${viewerUrl}\n\nTerima kasih telah melakukan pembayaran tepat waktu.\nSalam,\nPengelola Kos`;
       setShareModal({ url: viewerUrl, text: shareText });
     } catch (err: any) {
       console.error('Error handleShareKwitansi:', err);
@@ -298,10 +323,20 @@ export default function Payments() {
     setIsLoading(true);
 
     try {
+      // For daily payments, encode period as "Harian: 1 Agustus - 3 Agustus 2026"
+      let effectivePaymentMonth = formData.payment_month;
+      if (paymentType === "harian" && numDays && formData.payment_date) {
+        const startParts = formData.payment_date.split('-').map(Number);
+        const startDate = new Date(startParts[0], startParts[1] - 1, startParts[2]);
+        const endDate = new Date(startParts[0], startParts[1] - 1, startParts[2] + parseInt(numDays) - 1);
+        const fmt = (d: Date) => `${d.getDate()} ${d.toLocaleString('id-ID', { month: 'long' })} ${d.getFullYear()}`;
+        effectivePaymentMonth = `Harian: ${fmt(startDate)} - ${fmt(endDate)}`;
+      }
+
       const paymentData = {
         resident_id: formData.resident_id,
         payment_date: formData.payment_date,
-        payment_month: formData.payment_month,
+        payment_month: effectivePaymentMonth,
         amount: parseFloat(formData.amount),
         payment_method: formData.payment_method,
       };
@@ -380,6 +415,9 @@ export default function Payments() {
       payment_month: months[new Date().getMonth()],
     });
     setSelectedPayment(null);
+    setPaymentType("bulanan");
+    setDailyRate("");
+    setNumDays("");
   };
 
   const openEditDialog = (payment: Payment) => {
@@ -391,6 +429,17 @@ export default function Payments() {
       amount: payment.amount.toString(),
       payment_method: payment.payment_method,
     });
+    // Detect daily payment
+    const isDaily = payment.payment_month.startsWith("Harian");
+    setPaymentType(isDaily ? "harian" : "bulanan");
+    if (isDaily) {
+      // Try to extract rate and days from stored amount (rate not stored, show amount as reference)
+      setDailyRate("");
+      setNumDays("");
+    } else {
+      setDailyRate("");
+      setNumDays("");
+    }
     setIsDialogOpen(true);
   };
 
@@ -468,6 +517,29 @@ export default function Payments() {
             }
           >
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Payment Type Toggle */}
+              <div className="space-y-2">
+                <Label>Jenis Pembayaran</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={paymentType === "bulanan" ? "default" : "outline"}
+                    className="flex-1"
+                    onClick={() => { setPaymentType("bulanan"); setDailyRate(""); setNumDays(""); }}
+                  >
+                    Bulanan
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={paymentType === "harian" ? "default" : "outline"}
+                    className="flex-1"
+                    onClick={() => { setPaymentType("harian"); setFormData({ ...formData, amount: "" }); }}
+                  >
+                    Harian
+                  </Button>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="resident_id">Penghuni</Label>
                 {selectedPayment ? (
@@ -511,6 +583,45 @@ export default function Payments() {
                 )}
               </div>
 
+              {/* Daily fields — show when paymentType === harian */}
+              {paymentType === "harian" && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="daily_rate">Tarif/Hari (Rp)</Label>
+                    <Input
+                      id="daily_rate"
+                      type="number"
+                      value={dailyRate}
+                      onChange={(e) => {
+                        const rate = e.target.value;
+                        setDailyRate(rate);
+                        const total = rate && numDays ? parseInt(rate) * parseInt(numDays) : 0;
+                        setFormData({ ...formData, amount: total > 0 ? total.toString() : "" });
+                      }}
+                      placeholder="Contoh: 50000"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="num_days">Jumlah Hari</Label>
+                    <Input
+                      id="num_days"
+                      type="number"
+                      value={numDays}
+                      onChange={(e) => {
+                        const days = e.target.value;
+                        setNumDays(days);
+                        const total = dailyRate && days ? parseInt(dailyRate) * parseInt(days) : 0;
+                        setFormData({ ...formData, amount: total > 0 ? total.toString() : "" });
+                      }}
+                      placeholder="Contoh: 3"
+                      min="1"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="payment_date">Tanggal Bayar</Label>
@@ -546,8 +657,10 @@ export default function Payments() {
                 <div className="space-y-2">
                   <Label htmlFor="amount">
                     Jumlah
-                    {formData.amount && !selectedPayment && (
-                      <span className="ml-2 text-xs font-normal text-muted-foreground">(otomatis dari kamar)</span>
+                    {!selectedPayment && (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        {paymentType === "harian" ? "(otomatis)" : "(otomatis dari kamar)"}
+                      </span>
                     )}
                   </Label>
                   <Input
