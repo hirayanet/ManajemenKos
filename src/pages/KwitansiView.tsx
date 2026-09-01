@@ -6,7 +6,7 @@ import { generateKwitansiPDF } from "@/lib/kwitansiPDF";
 import { jsPDFToBlob } from "@/lib/pdfUtils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Download, Share2, FileImage, FileText, Loader2 } from "lucide-react";
+import { FileImage, FileText, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
 interface PaymentData {
@@ -115,11 +115,7 @@ export default function KwitansiView() {
     }
   };
 
-  const handleShareWhatsApp = () => {
-    if (!payment) return;
-    const text = `Berikut kwitansi pembayaran sewa kos:\n\nNama: ${payment.residents?.full_name}\nKamar: ${payment.residents?.rooms?.room_number || "-"}\nBulan: ${payment.payment_month}\nNominal: Rp ${payment.amount.toLocaleString("id-ID")}\nMetode: ${payment.payment_method}\nTanggal: ${format(new Date(payment.payment_date), "dd MMMM yyyy")}\n\nTerima kasih telah melakukan pembayaran tepat waktu 🙏`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
-  };
+
 
   // Loading state
   if (loading) {
@@ -199,15 +195,7 @@ export default function KwitansiView() {
             <FileText className="h-4 w-4 mr-2" />
             Unduh sebagai PDF
           </Button>
-          <Button
-            variant="outline"
-            className="w-full bg-green-500 hover:bg-green-600 text-white border-green-500"
-            size="lg"
-            onClick={handleShareWhatsApp}
-          >
-            <Share2 className="h-4 w-4 mr-2" />
-            Bagikan ke WhatsApp
-          </Button>
+
         </div>
 
         {/* Footer */}

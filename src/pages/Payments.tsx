@@ -283,7 +283,7 @@ export default function Payments() {
       setShareUrl(viewerUrl);
       await supabase.from('payments').update({ receipt_url: viewerUrl }).eq('id', payment.id);
 
-      const shareText = `Halo ${payment.residents.full_name} 👋\n\nBerikut kwitansi pembayaran sewa kos Anda:\n\n🏠 Kamar ${payment.residents.rooms?.room_number || "-"}\n📅 Bulan: ${periodeSewa}\n💰 Nominal: Rp ${payment.amount.toLocaleString('id-ID')}\n💳 Metode: ${payment.payment_method}\n📆 Tanggal Bayar: ${format(new Date(payment.payment_date), 'dd MMMM yyyy')}\n\nSilakan klik link berikut untuk melihat kwitansi:\n${viewerUrl}\n\nTerima kasih telah melakukan pembayaran tepat waktu 🙏\nSalam,\nPengelola Hiraya Kost`;
+      const shareText = `Berikut kwitansi pembayaran sewa kos untuk periode: *${periodeSewa}*\n\nNama: ${payment.residents.full_name}\nKamar: ${payment.residents.rooms?.room_number || "-"}\nNominal: Rp ${payment.amount.toLocaleString('id-ID')}\nMetode Pembayaran: ${payment.payment_method}\nTanggal Bayar: ${format(new Date(payment.payment_date), 'dd MMMM yyyy', { locale: undefined })}\n\nSilakan klik link berikut untuk melihat kwitansi:\n${viewerUrl}\n\nTerima kasih telah melakukan pembayaran tepat waktu.\nSalam,\nPengelola Kos`;
       setShareModal({ url: viewerUrl, text: shareText });
     } catch (err: any) {
       console.error('Error handleShareKwitansi:', err);

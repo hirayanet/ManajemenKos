@@ -179,8 +179,7 @@ export function generateKwitansiImage(data: KwitansiImageData): Promise<Blob> {
     // ── Badge row ──
     y += 16;
     const badgeY = y + 12;
-    drawBadge(ctx, "LUNAS", W / 2 - 70, badgeY, "#16a34a", "#ffffff", 14);
-    drawBadge(ctx, data.metodePembayaran, W / 2 + 70, badgeY, "#2563eb", "#ffffff", 12);
+    drawBadge(ctx, "LUNAS", W / 2, badgeY, "#16a34a", "#ffffff", 16);
     y += 44;
 
     // ── Divider ──
