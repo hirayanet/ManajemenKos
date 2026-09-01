@@ -17,6 +17,7 @@ import AuthGuard from "./components/AuthGuard";
 import ResidentHistory from "./pages/ResidentHistory";
 import DPReservasi from "./pages/DPReservasi";
 import AdminManagement from "./pages/AdminManagement";
+import KwitansiView from "./pages/KwitansiView";
 
 const queryClient = new QueryClient();
 
@@ -86,6 +87,7 @@ const App = () => (
               </Layout>
             </AuthGuard>
           } />
+          <Route path="/kwitansi/:id" element={<KwitansiView />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

@@ -1,6 +1,6 @@
 /**
  * Generate a mobile-friendly kwitansi image (PNG) using Canvas API.
- * The image is designed to look clean and modern, perfect for sharing on WhatsApp.
+ * Bold, badge-driven design for maximum readability on mobile.
  */
 
 interface KwitansiImageData {
@@ -14,13 +14,9 @@ interface KwitansiImageData {
   logoBase64?: string;
 }
 
-function drawRoundedRect(
+function roundRect(
   ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number
+  x: number, y: number, w: number, h: number, r: number
 ) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -35,11 +31,63 @@ function drawRoundedRect(
   ctx.closePath();
 }
 
+/** Draw a badge pill: colored background + white bold text */
+function drawBadge(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  cx: number,
+  cy: number,
+  bgColor: string,
+  textColor: string,
+  fontSize: number
+) {
+  ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+  const textW = ctx.measureText(text).width;
+  const padX = 14;
+  const padY = 7;
+  const bw = textW + padX * 2;
+  const bh = fontSize + padY * 2;
+  const bx = cx - bw / 2;
+  const by = cy - bh / 2;
+
+  roundRect(ctx, bx, by, bw, bh, bh / 2);
+  ctx.fillStyle = bgColor;
+  ctx.fill();
+
+  ctx.fillStyle = textColor;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, cx, cy);
+  ctx.textBaseline = "alphabetic";
+}
+
+/** Draw a bold label + value row */
+function drawBoldField(
+  ctx: CanvasRenderingContext2D,
+  label: string,
+  value: string,
+  leftX: number,
+  rightX: number,
+  y: number
+) {
+  // Label — small, muted, uppercase
+  ctx.fillStyle = "#64748b";
+  ctx.font = "bold 11px Arial, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText(label.toUpperCase(), leftX, y);
+
+  // Value — large, dark, bold
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "bold 15px Arial, sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText(value, rightX, y);
+}
+
 export function generateKwitansiImage(data: KwitansiImageData): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    const W = 480; // width
-    const H = 720; // height
-    const dpr = 2; // retina
+    const W = 500;
+    const H = 780;
+    const dpr = 2;
     const canvas = document.createElement("canvas");
     canvas.width = W * dpr;
     canvas.height = H * dpr;
@@ -47,148 +95,131 @@ export function generateKwitansiImage(data: KwitansiImageData): Promise<Blob> {
     canvas.style.height = H + "px";
     const ctx = canvas.getContext("2d");
     if (!ctx) return reject(new Error("Canvas not supported"));
-
     ctx.scale(dpr, dpr);
 
-    // Background
-    ctx.fillStyle = "#f0f4f8";
+    // ── Background ──
+    ctx.fillStyle = "#eef2f7";
     ctx.fillRect(0, 0, W, H);
 
-    // Card background
-    const cardX = 20;
-    const cardY = 16;
-    const cardW = W - 40;
-    const cardH = H - 32;
-    drawRoundedRect(ctx, cardX, cardY, cardW, cardH, 16);
+    // ── Card ──
+    const cx = 16, cy = 16, cw = W - 32, ch = H - 32;
+    roundRect(ctx, cx, cy, cw, ch, 20);
     ctx.fillStyle = "#ffffff";
     ctx.fill();
 
-    // Top accent bar
-    drawRoundedRect(ctx, cardX, cardY, cardW, 72, 16);
-    ctx.fillStyle = "#2563eb";
+    // ── Header bar (blue gradient) ──
+    const hdrH = 90;
+    roundRect(ctx, cx, cy, cw, hdrH, 20);
+    ctx.fillStyle = "#1d4ed8";
     ctx.fill();
-    // Square off bottom of accent bar
-    ctx.fillStyle = "#2563eb";
-    ctx.fillRect(cardX, cardY + 56, cardW, 16);
+    ctx.fillStyle = "#1d4ed8";
+    ctx.fillRect(cx, cy + 70, cw, 20);
 
-    // Logo (if provided)
-    let contentStartY = cardY + 90;
-    if (data.logoBase64) {
-      const logo = new Image();
-      logo.src = data.logoBase64;
-      // We draw logo synchronously after load by using a trick:
-      // Actually for simplicity, skip logo in image version
-    }
-
-    // Title on accent bar
+    // Title
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 18px Arial, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("BUKTI PEMBAYARAN", W / 2, cardY + 30);
-    ctx.font = "13px Arial, sans-serif";
-    ctx.fillText("HIRAYA KOST", W / 2, cardY + 50);
+    ctx.font = "bold 20px Arial, sans-serif";
+    ctx.fillText("BUKTI PEMBAYARAN", W / 2, cy + 34);
+    ctx.font = "bold 15px Arial, sans-serif";
+    ctx.fillStyle = "#bfdbfe";
+    ctx.fillText("HIRAYA KOST", W / 2, cy + 56);
 
-    // Subtitle
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "10px Arial, sans-serif";
-    ctx.fillText("Jl. Cempaka No.79 RT 01 RW 08 Sukahati, Cibinong", W / 2, cardY + 66);
+    // Address
+    ctx.fillStyle = "#93c5fd";
+    ctx.font = "11px Arial, sans-serif";
+    ctx.fillText("Jl. Cempaka No.79 RT 01 RW 08 Sukahati, Cibinong", W / 2, cy + 76);
 
-    // Content
-    const leftPad = cardX + 24;
-    const rightPad = cardX + cardW - 24;
-    let y = contentStartY + 10;
+    // ── Content area ──
+    const padX = cx + 28;
+    const padR = cx + cw - 28;
+    let y = cy + hdrH + 20;
 
-    const drawField = (label: string, value: string) => {
-      ctx.fillStyle = "#94a3b8";
-      ctx.font = "11px Arial, sans-serif";
-      ctx.textAlign = "left";
-      ctx.fillText(label, leftPad, y);
-      ctx.fillStyle = "#1e293b";
-      ctx.font = "14px Arial, sans-serif";
-      ctx.textAlign = "right";
-      ctx.fillText(value, rightPad, y);
-      y += 38;
-    };
+    // Fields
+    drawBoldField(ctx, "Nama Penyewa", data.namaPenyewa, padX, padR, y); y += 40;
+    drawBoldField(ctx, "Kamar", data.kamar, padX, padR, y); y += 40;
+    drawBoldField(ctx, "Bulan Sewa", data.bulanSewa, padX, padR, y); y += 40;
+    drawBoldField(ctx, "Tanggal Masuk", data.tanggalMasuk, padX, padR, y); y += 10;
 
-    drawField("Nama Penyewa", data.namaPenyewa);
-    drawField("Kamar", data.kamar);
-    drawField("Bulan Sewa", data.bulanSewa);
-    drawField("Tanggal Masuk", data.tanggalMasuk);
-
-    // Divider
-    y += 4;
-    ctx.strokeStyle = "#e2e8f0";
-    ctx.lineWidth = 1;
+    // ── Divider ──
+    y += 10;
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 3]);
     ctx.beginPath();
-    ctx.moveTo(leftPad, y);
-    ctx.lineTo(rightPad, y);
-    ctx.stroke();
-    y += 20;
-
-    // Amount highlight box
-    const amountBoxH = 64;
-    drawRoundedRect(ctx, leftPad - 4, y - 4, cardW - 40, amountBoxH, 10);
-    ctx.fillStyle = "#eff6ff";
-    ctx.fill();
-
-    ctx.fillStyle = "#64748b";
-    ctx.font = "12px Arial, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("NOMINAL PEMBAYARAN", W / 2, y + 16);
-
-    ctx.fillStyle = "#2563eb";
-    ctx.font = "bold 22px Arial, sans-serif";
-    ctx.fillText(data.nominal, W / 2, y + 44);
-
-    y += amountBoxH + 20;
-
-    drawField("Tanggal Bayar", data.tanggalBayar);
-    drawField("Metode Pembayaran", data.metodePembayaran);
-
-    // Divider
-    y += 4;
-    ctx.strokeStyle = "#e2e8f0";
-    ctx.beginPath();
-    ctx.moveTo(leftPad, y);
-    ctx.lineTo(rightPad, y);
-    ctx.stroke();
-    y += 24;
-
-    // LUNAS stamp
-    const stampCx = W / 2;
-    const stampCy = y + 16;
-    const stampR = 36;
-
-    // Circle outline
-    ctx.beginPath();
-    ctx.arc(stampCx, stampCy, stampR, 0, Math.PI * 2);
-    ctx.strokeStyle = "#16a34a";
-    ctx.lineWidth = 3;
-    ctx.setLineDash([6, 4]);
+    ctx.moveTo(padX, y);
+    ctx.lineTo(padR, y);
     ctx.stroke();
     ctx.setLineDash([]);
+    y += 20;
 
-    // LUNAS text
-    ctx.fillStyle = "#16a34a";
-    ctx.font = "bold 16px Arial, sans-serif";
+    // ── Amount highlight box ──
+    const amtH = 80;
+    roundRect(ctx, padX - 8, y - 4, cw - 48, amtH, 12);
+    ctx.fillStyle = "#dbeafe";
+    ctx.fill();
+    // Blue left accent bar
+    ctx.fillStyle = "#2563eb";
+    ctx.fillRect(padX - 8, y + 4, 5, amtH - 16);
+
+    ctx.fillStyle = "#3b82f6";
+    ctx.font = "bold 12px Arial, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("LUNAS", stampCx, stampCy - 2);
+    ctx.fillText("NOMINAL PEMBAYARAN", W / 2, y + 22);
 
-    // Hiraya Kost under stamp
+    ctx.fillStyle = "#1e40af";
+    ctx.font = "bold 28px Arial, sans-serif";
+    ctx.fillText(data.nominal, W / 2, y + 56);
+
+    y += amtH + 16;
+
+    // More fields
+    drawBoldField(ctx, "Tanggal Bayar", data.tanggalBayar, padX, padR, y); y += 40;
+    drawBoldField(ctx, "Metode Pembayaran", data.metodePembayaran, padX, padR, y); y += 10;
+
+    // ── Badge row ──
+    y += 16;
+    const badgeY = y + 12;
+    drawBadge(ctx, "LUNAS", W / 2 - 70, badgeY, "#16a34a", "#ffffff", 14);
+    drawBadge(ctx, data.metodePembayaran, W / 2 + 70, badgeY, "#2563eb", "#ffffff", 12);
+    y += 44;
+
+    // ── Divider ──
+    y += 8;
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 3]);
+    ctx.beginPath();
+    ctx.moveTo(padX, y);
+    ctx.lineTo(padR, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    y += 24;
+
+    // ── Signature area ──
+    const sigRightX = padR - 10;
+    ctx.fillStyle = "#64748b";
+    ctx.font = "bold 12px Arial, sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText("Pengelola Kost", sigRightX, y); y += 8;
+    ctx.strokeStyle = "#94a3b8";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sigRightX - 100, y + 18);
+    ctx.lineTo(sigRightX, y + 18);
+    ctx.stroke();
+    y += 36;
+
+    // ── Footer ──
+    y += 10;
     ctx.fillStyle = "#94a3b8";
-    ctx.font = "10px Arial, sans-serif";
-    ctx.fillText("Hiraya Kost", stampCx, stampCy + 14);
-
-    y += 60;
-
-    // Footer
-    ctx.fillStyle = "#cbd5e1";
-    ctx.font = "10px Arial, sans-serif";
+    ctx.font = "11px Arial, sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("Dokumen ini merupakan bukti pembayaran yang sah.", W / 2, y);
-    ctx.fillText("Kontak Pengelola: 087722667913", W / 2, y + 16);
+    ctx.font = "bold 11px Arial, sans-serif";
+    ctx.fillStyle = "#64748b";
+    ctx.fillText("Kontak Pengelola: 087722667913", W / 2, y + 18);
 
-    // Convert to blob
+    // ── Convert to blob ──
     canvas.toBlob(
       (blob) => {
         if (blob) resolve(blob);

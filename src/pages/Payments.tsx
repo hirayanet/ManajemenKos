@@ -266,48 +266,28 @@ export default function Payments() {
   };
 
 
-  // Fungsi share kwitansi multi-platform
+  // Fungsi share kwitansi — generates viewer page link
   const handleShareKwitansi = async (payment: Payment) => {
     setUploadingId(payment.id);
     setShareUrl(null);
     try {
-      // Logging data yang akan digunakan
-      console.log('Generate kwitansi untuk:', payment);
       if (!payment.residents.full_name || !payment.residents.entry_date || !payment.amount || !payment.payment_date) {
         throw new Error('Data pembayaran/resident tidak lengkap!');
       }
-      const { doc, periodeSewa } = generateKwitansiPDF({
-        namaPenyewa: payment.residents.full_name,
-        tanggalMasuk: payment.residents.entry_date, // gunakan entry_date sebagai tanggal masuk penghuni
-        nominal: `Rp ${payment.amount.toLocaleString('id-ID')}`,
-        tanggal: payment.payment_date,
-        logoBase64: logoImg,
-        kamar: payment.residents.rooms?.room_number ? payment.residents.rooms.room_number.toString() : '',
-        metodePembayaran: payment.payment_method,
-        bulanSewa: payment.payment_month,
-      });
-      if (!doc) {
-        throw new Error('Gagal generate dokumen PDF');
-      }
-      const blob = await jsPDFToBlob(doc);
-      if (!blob) {
-        throw new Error('Gagal konversi PDF ke blob');
-      }
-      const fileName = `kwitansi-${payment.residents.full_name.replace(/\s+/g, "_")}-${payment.payment_date}-${format(new Date(), 'HHmmss')}.pdf`;
-      const url = await uploadPDFtoSupabase(blob, fileName);
-      if (url) {
-        setShareUrl(url);
-        await supabase.from('payments').update({ receipt_url: url }).eq('id', payment.id);
-        // Template share sesuai permintaan user
-        const shareText = `Berikut kwitansi pembayaran sewa kos untuk periode: *${periodeSewa}*\n\nNama: ${payment.residents.full_name}\nKamar: ${payment.residents.rooms?.room_number || "-"}\nNominal: Rp ${payment.amount.toLocaleString('id-ID')}\nMetode Pembayaran: ${payment.payment_method}\nTanggal Bayar: ${format(new Date(payment.payment_date), 'dd MMMM yyyy', { locale: undefined })}\n\nSilakan unduh kwitansi pada link berikut: ${url}\n\nTerima kasih telah melakukan pembayaran tepat waktu.\nSalam,\nPengelola Kos`;
-        setShareModal({ url, text: shareText }); // Tampilkan modal share, gesture share dilakukan dari tombol modal
-      } else {
-        console.error('Upload PDF ke Supabase gagal');
-        toast({ title: 'Gagal upload PDF', description: 'Terjadi masalah saat upload kwitansi', variant: 'destructive' });
-      }
+
+      // Build the viewer page URL
+      const baseUrl = window.location.origin;
+      const viewerUrl = `${baseUrl}/kwitansi/${payment.id}`;
+      const periodeSewa = payment.payment_month;
+
+      setShareUrl(viewerUrl);
+      await supabase.from('payments').update({ receipt_url: viewerUrl }).eq('id', payment.id);
+
+      const shareText = `Halo ${payment.residents.full_name} 👋\n\nBerikut kwitansi pembayaran sewa kos Anda:\n\n🏠 Kamar ${payment.residents.rooms?.room_number || "-"}\n📅 Bulan: ${periodeSewa}\n💰 Nominal: Rp ${payment.amount.toLocaleString('id-ID')}\n💳 Metode: ${payment.payment_method}\n📆 Tanggal Bayar: ${format(new Date(payment.payment_date), 'dd MMMM yyyy')}\n\nSilakan klik link berikut untuk melihat kwitansi:\n${viewerUrl}\n\nTerima kasih telah melakukan pembayaran tepat waktu 🙏\nSalam,\nPengelola Hiraya Kost`;
+      setShareModal({ url: viewerUrl, text: shareText });
     } catch (err: any) {
       console.error('Error handleShareKwitansi:', err);
-      toast({ title: 'Error', description: err?.message || 'Gagal membuat atau upload kwitansi', variant: 'destructive' });
+      toast({ title: 'Error', description: err?.message || 'Gagal membuat link kwitansi', variant: 'destructive' });
     } finally {
       setUploadingId(null);
     }
