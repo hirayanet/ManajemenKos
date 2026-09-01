@@ -17,7 +17,7 @@ const Layout = ({ children }: LayoutProps) => {
           {/* Mobile Header */}
           <header className="sticky top-0 z-40 h-14 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="flex items-center h-full px-4">
-              <h1 className="font-bold text-base">Sistem Manajemen Kos</h1>
+              <h1 className="font-bold text-base">KOSFLOW</h1>
             </div>
           </header>
 
@@ -43,7 +43,7 @@ const Layout = ({ children }: LayoutProps) => {
             <div className="flex items-center h-full px-4">
               <SidebarTrigger className="mr-4" />
               <div className="flex items-center space-x-2">
-                <h1 className="font-semibold">Sistem Manajemen Kos</h1>
+                <h1 className="font-semibold">KOSFLOW</h1>
               </div>
             </div>
           </header>

@@ -48,7 +48,7 @@ const Login = () => {
 
       toast({
         title: "Login berhasil",
-        description: "Selamat datang di sistem manajemen kos",
+        description: "Selamat datang di KOSFLOW",
       });
 
       navigate("/dashboard");
@@ -72,9 +72,9 @@ const Login = () => {
               <Building className="h-8 w-8 text-primary-foreground" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Manajemen Kos</CardTitle>
+          <CardTitle className="text-2xl font-bold">KOSFLOW</CardTitle>
           <CardDescription>
-            Masuk sebagai admin untuk mengelola kos-kosan
+            Manajemen Kos & Pembayaran
           </CardDescription>
         </CardHeader>
         <CardContent>
