@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import MobileFullScreenDialog from "@/components/MobileFullScreenDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -444,28 +444,27 @@ export default function Payments() {
               </SelectContent>
             </Select>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={openAddDialog} className="bg-primary hover:bg-primary/90">
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Tambah Pembayaran
-              </Button>
-            </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>
-                {selectedPayment ? "Edit Pembayaran" : "Tambah Pembayaran Baru"}
-              </DialogTitle>
-              <DialogDescription>
-                Silakan lengkapi data pembayaran kos di bawah ini. Semua kolom wajib diisi.
-              </DialogDescription>
-              {isLoading && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></span>
-                  <span>Menyimpan…</span>
-                </div>
-              )}
-            </DialogHeader>
+          <Button onClick={() => { openAddDialog(); setIsDialogOpen(true); }} className="bg-primary hover:bg-primary/90">
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Tambah Pembayaran
+          </Button>
+          <MobileFullScreenDialog
+            open={isDialogOpen}
+            onOpenChange={setIsDialogOpen}
+            title={selectedPayment ? "Edit Pembayaran" : "Tambah Pembayaran Baru"}
+            description="Silakan lengkapi data pembayaran kos. Semua kolom wajib diisi."
+            footer={
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" className="flex-1" onClick={() => setIsDialogOpen(false)} disabled={isLoading}>Batal</Button>
+                <Button type="button" className="flex-1" disabled={isLoading} onClick={() => {
+                  const forms = document.querySelectorAll('form');
+                  forms.forEach(f => f.requestSubmit());
+                }}>
+                  {isLoading ? "Menyimpan..." : selectedPayment ? "Perbarui" : "Simpan"}
+                </Button>
+              </div>
+            }
+          >
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="resident_id">Penghuni</Label>
@@ -578,17 +577,8 @@ export default function Payments() {
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Batal
-                </Button>
-                <Button type="submit" disabled={isLoading}>
-                  {isLoading ? "Menyimpan..." : selectedPayment ? "Perbarui" : "Simpan"}
-                </Button>
-              </div>
             </form>
-          </DialogContent>
-        </Dialog>
+          </MobileFullScreenDialog>
         </div>
       </div>
 

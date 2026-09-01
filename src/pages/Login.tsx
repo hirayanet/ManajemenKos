@@ -7,6 +7,7 @@ import { Building, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import bcrypt from "bcryptjs";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -32,9 +33,9 @@ const Login = () => {
         throw new Error("Email atau password salah");
       }
 
-      // For simplicity, we'll use plain text comparison
-      // In production, you should use proper password hashing
-      if (password !== "admin123") {
+      // Verify password against the bcrypt hash stored in the database
+      const isPasswordValid = bcrypt.compareSync(password, admin.password_hash);
+      if (!isPasswordValid) {
         throw new Error("Email atau password salah");
       }
 

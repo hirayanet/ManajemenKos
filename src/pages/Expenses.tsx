@@ -334,12 +334,15 @@ export default function Expenses() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-4">
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">Pengeluaran Bulanan Kosan</h1>
-        <div className="flex space-x-2">
+    <div className="max-w-2xl mx-auto">
+      <div className="mb-4">
+        <h1 className="text-xl md:text-2xl font-bold">Pengeluaran Bulanan Kosan</h1>
+      </div>
+      {/* Filters — stack on mobile, row on desktop */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+        <div className="flex flex-wrap gap-2">
           <Select value={reportPeriod} onValueChange={(value: "year" | "month") => setReportPeriod(value)}>
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="w-full md:w-32">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -348,7 +351,7 @@ export default function Expenses() {
             </SelectContent>
           </Select>
           <Select value={selectedYear} onValueChange={setSelectedYear}>
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="w-full md:w-32">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -359,7 +362,7 @@ export default function Expenses() {
           </Select>
           {reportPeriod === "month" && (
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-32">
+              <SelectTrigger className="w-full md:w-32">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -369,11 +372,11 @@ export default function Expenses() {
               </SelectContent>
             </Select>
           )}
-          <Button onClick={generatePDFReport} variant="outline">
-            <Download className="mr-2 h-4 w-4" />
-            Export PDF
-          </Button>
         </div>
+        <Button onClick={generatePDFReport} variant="outline" className="w-full md:w-auto">
+          <Download className="mr-2 h-4 w-4" />
+          Export PDF
+        </Button>
       </div>
       <form onSubmit={handleAddExpense} className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>

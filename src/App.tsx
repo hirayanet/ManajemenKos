@@ -16,6 +16,7 @@ import AuthGuard from "./components/AuthGuard";
 // Import halaman ResidentHistory
 import ResidentHistory from "./pages/ResidentHistory";
 import DPReservasi from "./pages/DPReservasi";
+import AdminManagement from "./pages/AdminManagement";
 
 const queryClient = new QueryClient();
 
@@ -75,6 +76,13 @@ const App = () => (
             <AuthGuard>
               <Layout>
                 <ResidentHistory />
+              </Layout>
+            </AuthGuard>
+          } />
+          <Route path="/admin-management" element={
+            <AuthGuard>
+              <Layout>
+                <AdminManagement />
               </Layout>
             </AuthGuard>
           } />

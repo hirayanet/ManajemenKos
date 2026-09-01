@@ -177,12 +177,12 @@ export default function Reports() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-foreground">Laporan</h1>
-        <div className="flex space-x-2">
+    <div className="space-y-4 md:space-y-6">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
+        <h1 className="text-xl md:text-3xl font-bold text-foreground">Laporan</h1>
+        <div className="flex gap-2">
           <Select value={selectedYear} onValueChange={setSelectedYear}>
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="w-full md:w-32">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -191,7 +191,7 @@ export default function Reports() {
               ))}
             </SelectContent>
           </Select>
-          <Button onClick={generatePDFReport} variant="outline">
+          <Button onClick={generatePDFReport} variant="outline" className="flex-1 md:flex-none">
             <Download className="mr-2 h-4 w-4" />
             Export PDF
           </Button>
@@ -206,47 +206,47 @@ export default function Reports() {
 
       <div className={isLoading ? 'hidden' : ''}>
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <DollarSign className="h-8 w-8 text-primary" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Total Pendapatan</p>
-                <p className="text-2xl font-bold">Rp {totalIncome.toLocaleString("id-ID")}</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <Card className="shadow-sm">
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-primary shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[11px] md:text-sm font-medium text-muted-foreground truncate">Pendapatan</p>
+                <p className="text-sm md:text-2xl font-bold truncate">Rp {totalIncome.toLocaleString("id-ID")}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <DollarSign className="h-8 w-8 text-red-500" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Total Pengeluaran</p>
-                <p className="text-2xl font-bold">Rp {totalExpenses.toLocaleString("id-ID")}</p>
+        <Card className="shadow-sm">
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-red-500 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[11px] md:text-sm font-medium text-muted-foreground truncate">Pengeluaran</p>
+                <p className="text-sm md:text-2xl font-bold truncate">Rp {totalExpenses.toLocaleString("id-ID")}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <Users className="h-8 w-8 text-primary" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Penghuni Aktif</p>
-                <p className="text-2xl font-bold">{totalResidents}</p>
+        <Card className="shadow-sm">
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-blue-500 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[11px] md:text-sm font-medium text-muted-foreground truncate">Penghuni</p>
+                <p className="text-sm md:text-2xl font-bold truncate">{totalResidents}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <Home className="h-8 w-8 text-primary" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Tingkat Hunian</p>
-                <p className="text-2xl font-bold">{occupancyRate.toFixed(1)}%</p>
+        <Card className="shadow-sm">
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center gap-2">
+              <Home className="h-5 w-5 text-emerald-500 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[11px] md:text-sm font-medium text-muted-foreground truncate">Tingkat Hunian</p>
+                <p className="text-sm md:text-2xl font-bold truncate">{occupancyRate.toFixed(1)}%</p>
               </div>
             </div>
           </CardContent>
@@ -280,7 +280,7 @@ export default function Reports() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Pendapatan Bulanan {selectedYear}</CardTitle>
@@ -360,13 +360,29 @@ export default function Reports() {
 
     </div>
 
-    {/* Monthly Data Table */}
-    <Card>
-      <CardHeader>
-        <CardTitle>Detail Pendapatan & Pengeluaran per Bulan</CardTitle>
+    {/* Monthly Data — Mobile cards */}
+    <Card className="shadow-sm">
+      <CardHeader className="pb-2 md:pb-4">
+        <CardTitle className="text-base md:text-lg">Detail per Bulan</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
+      <CardContent className="pt-0">
+        {/* Mobile card list */}
+        <div className="block md:hidden space-y-2">
+          {monthlyData.map((month, idx) => (
+            <div key={month.month} className="flex items-center justify-between p-3 border rounded-xl">
+              <div className="min-w-0">
+                <p className="font-medium text-sm">{month.month}</p>
+                <p className="text-[11px] text-muted-foreground">{month.payments} pembayaran</p>
+              </div>
+              <div className="text-right shrink-0 ml-3">
+                <p className="text-sm font-semibold text-emerald-600">+{month.income.toLocaleString("id-ID")}</p>
+                <p className="text-sm font-semibold text-red-500">-{monthlyExpenses[idx].toLocaleString("id-ID")}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto">
           <Table className="min-w-[720px]">
             <TableHeader>
               <TableRow>

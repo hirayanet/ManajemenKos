@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import MobileFullScreenDialog from "@/components/MobileFullScreenDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -609,24 +609,30 @@ export default function Residents() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-foreground">Data Penghuni</h1>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="bg-primary hover:bg-primary/90">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Tambah Penghuni
+        <h1 className="text-xl md:text-3xl font-bold text-foreground">Data Penghuni</h1>
+        <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="bg-primary hover:bg-primary/90">
+          <PlusCircle className="mr-2 h-4 w-4" />
+          <span className="hidden sm:inline">Tambah Penghuni</span>
+          <span className="sm:hidden">Tambah</span>
+        </Button>
+      </div>
+      <MobileFullScreenDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        title={selectedResident ? "Edit Penghuni" : "Tambah Penghuni Baru"}
+        footer={
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" className="flex-1" onClick={() => setIsDialogOpen(false)} disabled={isLoading}>Batal</Button>
+            <Button type="button" className="flex-1" disabled={isLoading} onClick={() => {
+              // Trigger form submit by finding the form and calling requestSubmit
+              const forms = document.querySelectorAll('form');
+              forms.forEach(f => f.requestSubmit());
+            }}>
+              {isLoading ? "Menyimpan..." : "Simpan"}
             </Button>
-          </DialogTrigger>
-          <DialogContent className="w-[95vw] sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{selectedResident ? "Edit Penghuni" : "Tambah Penghuni Baru"}</DialogTitle>
-              {isLoading && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></span>
-                  <span>Menyimpan…</span>
-                </div>
-              )}
-            </DialogHeader>
+          </div>
+        }
+      >
             {selectedResident ? (
               editMode === "single" ? (
                 <form
@@ -880,19 +886,9 @@ export default function Residents() {
                     )}
                   </div>
                 )}
-                <div className="flex justify-end space-x-2 pt-2">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Batal
-                  </Button>
-                  <Button type="submit" disabled={isLoading}>
-                    {isLoading ? "Menyimpan..." : "Simpan"}
-                  </Button>
-                </div>
               </form>
             )}
-          </DialogContent>
-        </Dialog>
-      </div>
+      </MobileFullScreenDialog>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Daftar Penghuni</CardTitle>
