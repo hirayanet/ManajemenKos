@@ -25,6 +25,7 @@ import { format } from "date-fns";
 import jsPDF from "jspdf";
 import logoImg from '../assets/hr_logo_base64'; // (Pastikan file ini ada dan berisi string base64 logo Anda)
 import { generateKwitansiPDF } from '../lib/kwitansiPDF';
+import { downloadKwitansiImage } from '../lib/kwitansiImage';
 
 // Harga kamar tetap
 const ROOM_PRICES: Record<number, number> = {
@@ -225,6 +226,27 @@ export default function Payments() {
         description: "Gagal memuat data penghuni",
         variant: "destructive",
       });
+    }
+  };
+
+  // Generate and download image kwitansi
+  const generateReceiptImage = async (payment: Payment) => {
+    try {
+      await downloadKwitansiImage(
+        {
+          namaPenyewa: payment.residents.full_name,
+          kamar: payment.residents.rooms?.room_number?.toString() || '-',
+          bulanSewa: payment.payment_month,
+          nominal: `Rp ${payment.amount.toLocaleString('id-ID')}`,
+          tanggalBayar: format(new Date(payment.payment_date), 'dd MMMM yyyy'),
+          metodePembayaran: payment.payment_method,
+          tanggalMasuk: format(new Date(payment.residents.entry_date), 'dd MMMM yyyy'),
+        },
+        `kwitansi-${payment.residents.full_name.replace(/\s+/g, '_')}-${payment.payment_date}.png`
+      );
+      toast({ title: 'Berhasil', description: 'Kwitansi gambar berhasil diunduh' });
+    } catch (err: any) {
+      toast({ title: 'Gagal', description: err?.message || 'Gagal generate kwitansi gambar', variant: 'destructive' });
     }
   };
 
@@ -727,8 +749,11 @@ export default function Payments() {
     </Button>
   </DropdownMenuTrigger>
   <DropdownMenuContent align="end">
+    <DropdownMenuItem onClick={() => generateReceiptImage(payment)}>
+      <Download className="h-4 w-4 mr-2" /> Download Kwitansi (Gambar)
+    </DropdownMenuItem>
     <DropdownMenuItem onClick={() => generateReceiptPDF(payment)}>
-      <Receipt className="h-4 w-4 mr-2" /> Download Kwitansi
+      <Receipt className="h-4 w-4 mr-2" /> Download Kwitansi (PDF)
     </DropdownMenuItem>
     <DropdownMenuItem
       onClick={() => handleShareKwitansi(payment)}
@@ -797,11 +822,21 @@ export default function Payments() {
                 variant="outline"
                 className="w-full justify-center"
                 onClick={() => {
+                  generateReceiptImage(kwitansiSheetPayment);
+                  setKwitansiSheetPayment(null);
+                }}
+              >
+                <Download className="h-4 w-4 mr-2" /> Unduh Kwitansi (Gambar)
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full justify-center"
+                onClick={() => {
                   generateReceiptPDF(kwitansiSheetPayment);
                   setKwitansiSheetPayment(null);
                 }}
               >
-                <Receipt className="h-4 w-4 mr-2" /> Download Kwitansi
+                <Receipt className="h-4 w-4 mr-2" /> Unduh Kwitansi (PDF)
               </Button>
               <Button
                 className="w-full justify-center"

@@ -607,7 +607,7 @@ export default function Residents() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-xl md:text-3xl font-bold text-foreground">Data Penghuni</h1>
         <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="bg-primary hover:bg-primary/90">
@@ -890,13 +890,13 @@ export default function Residents() {
             )}
       </MobileFullScreenDialog>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Daftar Penghuni</CardTitle>
-          <div className="flex space-x-2">
+        <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <CardTitle className="text-base md:text-lg">Daftar Penghuni</CardTitle>
+          <div className="flex gap-2">
             <Select value={statusFilter} onValueChange={(value: "Aktif" | "Sudah Keluar" | "Semua") => {
               setStatusFilter(value);
             }}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full md:w-[180px]">
                 <SelectValue placeholder="Filter Status" />
               </SelectTrigger>
               <SelectContent>

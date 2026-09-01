@@ -1,4 +1,8 @@
 import { ReactNode } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -6,9 +10,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 interface MobileFullScreenDialogProps {
   open: boolean;
@@ -16,9 +17,7 @@ interface MobileFullScreenDialogProps {
   title: string;
   description?: string;
   children: ReactNode;
-  /** Content to render at the bottom (e.g., submit button) — fixed on mobile */
   footer?: ReactNode;
-  /** Max width for desktop mode */
   maxWidth?: string;
 }
 
@@ -36,39 +35,41 @@ export default function MobileFullScreenDialog({
   if (isMobile) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="inset-0 w-full h-full max-w-none max-h-none p-0 m-0 rounded-none border-0 gap-0 data-[state=open]:slide-in-from-bottom-full data-[state=closed]:slide-out-to-bottom-full">
-          {/* Sticky Header */}
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3">
-            <div>
-              <DialogTitle className="text-base font-semibold">{title}</DialogTitle>
-              {description && (
-                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                  {description}
-                </DialogDescription>
-              )}
+        {/* Override the overlay */}
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60" />
+          <DialogPrimitive.Content className="fixed inset-0 z-50 flex flex-col bg-background p-0 m-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
+            {/* Sticky Header */}
+            <div className="flex items-center justify-between border-b bg-background px-4 py-3 shrink-0">
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold leading-none">{title}</h2>
+                {description && (
+                  <p className="text-xs text-muted-foreground mt-1">{description}</p>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onOpenChange(false)}
+                className="h-8 w-8 shrink-0 ml-2"
+              >
+                <X className="h-5 w-5" />
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => onOpenChange(false)}
-              className="h-8 w-8"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
 
-          {/* Scrollable Content */}
-          <div className="flex-1 overflow-y-auto p-4 pb-24">
-            {children}
-          </div>
-
-          {/* Fixed Footer */}
-          {footer && (
-            <div className="sticky bottom-0 border-t bg-background px-4 py-3">
-              {footer}
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {children}
             </div>
-          )}
-        </DialogContent>
+
+            {/* Fixed Footer */}
+            {footer && (
+              <div className="border-t bg-background px-4 py-3 shrink-0">
+                {footer}
+              </div>
+            )}
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
       </Dialog>
     );
   }
