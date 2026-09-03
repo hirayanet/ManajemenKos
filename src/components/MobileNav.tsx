@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/sheet";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { isOwner } from "@/lib/roles";
 
 const mainTabs = [
   { title: "Home", url: "/dashboard", icon: Home },
@@ -29,10 +30,12 @@ const moreMenuItems = [
   { title: "Pengeluaran", url: "/expenses" },
   { title: "Riwayat Penghuni", url: "/resident-history" },
   { title: "Manajemen Admin", url: "/admin-management" },
+  { title: "Pengaturan", url: "/settings" },
 ];
 
 export default function MobileNav() {
   const [open, setOpen] = useState(false);
+  const owner = isOwner();
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
@@ -92,7 +95,11 @@ export default function MobileNav() {
               <SheetTitle className="text-lg">Menu Lainnya</SheetTitle>
             </SheetHeader>
             <div className="space-y-1 pb-4">
-              {moreMenuItems.map((item) => (
+              {moreMenuItems
+                .filter(
+                  (item) => owner || (item.url !== "/admin-management" && item.url !== "/settings")
+                )
+                .map((item) => (
                 <button
                   key={item.url}
                   onClick={() => {

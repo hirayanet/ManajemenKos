@@ -21,6 +21,7 @@ export type Database = {
           id: string
           name: string
           password_hash: string
+          role: string
           updated_at: string
         }
         Insert: {
@@ -29,6 +30,7 @@ export type Database = {
           id?: string
           name: string
           password_hash: string
+          role: string
           updated_at?: string
         }
         Update: {
@@ -37,6 +39,46 @@ export type Database = {
           id?: string
           name?: string
           password_hash?: string
+          role?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      app_settings: {
+        Row: {
+          address: string
+          business_name: string
+          created_at: string
+          id: number
+          labels: Json
+          logo_url: string | null
+          phone: string
+          signature_url: string | null
+          tagline: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string
+          business_name?: string
+          created_at?: string
+          id?: number
+          labels?: Json
+          logo_url?: string | null
+          phone?: string
+          signature_url?: string | null
+          tagline?: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          business_name?: string
+          created_at?: string
+          id?: number
+          labels?: Json
+          logo_url?: string | null
+          phone?: string
+          signature_url?: string | null
+          tagline?: string
           updated_at?: string
         }
         Relationships: []
@@ -88,6 +130,85 @@ export type Database = {
           },
         ]
       }
+      dp_reservasi: {
+        Row: {
+          catatan: string | null
+          created_at: string
+          deadline_pelunasan: string
+          harga_per_bulan: number
+          id: string
+          nama_calon: string
+          nominal_dp: number
+          nominal_pelunasan: number
+          payment_method_dp: string
+          payment_method_pelunasan: string | null
+          phone_number: string | null
+          receipt_url_dp: string | null
+          receipt_url_pelunasan: string | null
+          resident_id: string | null
+          room_id: number
+          status: string
+          tanggal_dp: string
+          tanggal_pelunasan: string | null
+          updated_at: string
+        }
+        Insert: {
+          catatan?: string | null
+          created_at?: string
+          deadline_pelunasan: string
+          harga_per_bulan: number
+          id?: string
+          nama_calon: string
+          nominal_dp: number
+          payment_method_dp?: string
+          payment_method_pelunasan?: string | null
+          phone_number?: string | null
+          receipt_url_dp?: string | null
+          receipt_url_pelunasan?: string | null
+          resident_id?: string | null
+          room_id: number
+          status?: string
+          tanggal_dp: string
+          tanggal_pelunasan?: string | null
+          updated_at?: string
+        }
+        Update: {
+          catatan?: string | null
+          created_at?: string
+          deadline_pelunasan?: string
+          harga_per_bulan?: number
+          id?: string
+          nama_calon?: string
+          nominal_dp?: number
+          payment_method_dp?: string
+          payment_method_pelunasan?: string | null
+          phone_number?: string | null
+          receipt_url_dp?: string | null
+          receipt_url_pelunasan?: string | null
+          resident_id?: string | null
+          room_id?: number
+          status?: string
+          tanggal_dp?: string
+          tanggal_pelunasan?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dp_reservasi_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dp_reservasi_resident_id_fkey"
+            columns: ["resident_id"]
+            isOneToOne: false
+            referencedRelation: "residents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           id: string;
@@ -130,6 +251,8 @@ export type Database = {
           marriage_document_url: string | null
           phone_number: string
           room_id: number
+          status_penghuni: string | null
+          tanggal_keluar: string | null
           updated_at: string
         }
         Insert: {
@@ -143,6 +266,8 @@ export type Database = {
           marriage_document_url?: string | null
           phone_number: string
           room_id: number
+          status_penghuni?: string | null
+          tanggal_keluar?: string | null
           updated_at?: string
         }
         Update: {
@@ -156,6 +281,8 @@ export type Database = {
           marriage_document_url?: string | null
           phone_number?: string
           room_id?: number
+          status_penghuni?: string | null
+          tanggal_keluar?: string | null
           updated_at?: string
         }
         Relationships: [

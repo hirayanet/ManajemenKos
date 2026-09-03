@@ -287,7 +287,7 @@ export default function Payments() {
   };
 
   // Generate and download PDF
-  const generateReceiptPDF = (payment: Payment) => {
+  const generateReceiptPDF = async (payment: Payment) => {
     const periodeSewa = formatPeriodeSewa({
       payment_month: payment.payment_month,
       payment_date: payment.payment_date,
@@ -295,7 +295,7 @@ export default function Payments() {
       periode_mulai: payment.periode_mulai ?? null,
       periode_selesai: payment.periode_selesai ?? null,
     });
-    const { doc } = generateKwitansiPDF({
+    const { doc } = await generateKwitansiPDF({
       namaPenyewa: payment.residents.full_name,
       tanggalMasuk: payment.residents.entry_date, // gunakan entry_date sebagai tanggal masuk penghuni
       nominal: `Rp ${payment.amount.toLocaleString('id-ID')}`,
@@ -336,7 +336,11 @@ export default function Payments() {
       setShareUrl(viewerUrl);
       await supabase.from('payments').update({ receipt_url: viewerUrl }).eq('id', payment.id);
 
-      const shareText = `Berikut kwitansi pembayaran sewa kos untuk periode:\n*${periodeSewa}*\n\n🏠 Nama: ${payment.residents.full_name}\n🚪 Kamar: ${payment.residents.rooms?.room_number || "-"}\n💰 Nominal: Rp ${payment.amount.toLocaleString('id-ID')}\n💳 Metode Pembayaran: ${payment.payment_method}\n📆 Tanggal Bayar: ${format(new Date(payment.payment_date), 'dd MMMM yyyy', { locale: undefined })}\n\nSilakan klik link berikut untuk melihat kwitansi:\n${viewerUrl}\n\nTerima kasih telah melakukan pembayaran tepat waktu.\nSalam,\nPengelola Kos`;
+      const kamarTxt =
+        payment.residents.rooms?.room_number != null
+          ? `Kamar ${payment.residents.rooms.room_number}`
+          : "-";
+      const shareText = `Berikut kwitansi pembayaran sewa kos untuk periode: *${periodeSewa}*\n\n🏠 Nama: ${payment.residents.full_name}\n🚪 Kamar: ${kamarTxt}\n💰 Nominal: Rp ${payment.amount.toLocaleString('id-ID')}\n💳 Metode Pembayaran: ${payment.payment_method}\n📆 Tanggal Bayar: ${format(new Date(payment.payment_date), 'dd MMMM yyyy', { locale: undefined })}\n\nSilakan klik link berikut untuk melihat kwitansi:\n${viewerUrl}\n\nTerima kasih telah melakukan pembayaran tepat waktu.\nSalam,\nPengelola Kos`;
       setShareModal({ url: viewerUrl, text: shareText });
     } catch (err: any) {
       console.error('Error handleShareKwitansi:', err);

@@ -1,68 +1,76 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import jsPDF from "jspdf";
+import {
+  drawBrandHeader,
+  docTitleBlock,
+  kvSection,
+  amountBand,
+  noteText,
+  signatureColumns,
+  stampRound,
+  drawFooter,
+  formatTanggalID,
+} from "./kwitansiUi";
+import { drawManagerSignature } from "./kwitansiSign";
+import { fetchBrandSettings, imageUrlToDataUrl, type BrandSettings } from "./branding";
+
+/** Rapi-kan label kamar agar tidak dobel: "Kamar 2" / "2" → "Kamar 2". */
+function kamarLabel(value: string): string {
+  const cleaned = (value || "").trim().replace(/^kamar\s*/i, "");
+  return cleaned ? `Kamar ${cleaned}` : "Kamar";
+}
 
 /**
- * Generate kwitansi PDF untuk Pelunasan kosan (setelah DP)
- * Format mengikuti kwitansi pembayaran reguler yang sudah ada
+ * Generate kwitansi PDF untuk Pelunasan kosan (setelah DP) — desain modern &
+ * profesional, memakai identitas bisnis dari pengaturan.
  */
-export function generateKwitansiPelunasanPDF({
-  namaPenyewa,
-  kamar,
-  nominalDP,
-  nominalPelunasan,
-  totalHarga,
-  tanggalPelunasan,
-  bulanSewa,
-  tanggalMasuk,
-  metodePembayaran,
-  logoBase64,
-}: {
-  namaPenyewa: string;
-  kamar: string;
-  nominalDP: string;
-  nominalPelunasan: string;
-  totalHarga: string;
-  tanggalPelunasan: string; // yyyy-mm-dd
-  bulanSewa: string;        // e.g. "Juni"
-  tanggalMasuk: string;     // yyyy-mm-dd (= tanggal pelunasan = entry_date)
-  metodePembayaran: string;
-  logoBase64: string;
-}): { doc: jsPDF; periodeSewa: string } {
+export async function generateKwitansiPelunasanPDF(
+  {
+    namaPenyewa,
+    kamar,
+    nominalDP,
+    nominalPelunasan,
+    totalHarga,
+    tanggalPelunasan,
+    bulanSewa,
+    tanggalMasuk,
+    metodePembayaran,
+    logoBase64,
+  }: {
+    namaPenyewa: string;
+    kamar: string;
+    nominalDP: string;
+    nominalPelunasan: string;
+    totalHarga: string;
+    tanggalPelunasan: string; // yyyy-mm-dd
+    bulanSewa: string; // e.g. "Juni"
+    tanggalMasuk: string; // yyyy-mm-dd (= tanggal pelunasan = entry_date)
+    metodePembayaran: string;
+    logoBase64: string;
+  },
+  overrides?: { brand?: BrandSettings }
+): Promise<{ doc: jsPDF; periodeSewa: string }> {
   const doc = new jsPDF();
 
-  // Logo
-  if (logoBase64) {
-    doc.addImage(logoBase64, 'PNG', 15, 10, 25, 25);
-  }
+  const brand = overrides?.brand ?? (await fetchBrandSettings());
 
-  // Header
-  doc.setFontSize(18);
-  doc.text('BUKTI PEMBAYARAN HIRAYA KOST', 105, 22, { align: 'center' });
-
-  // Alamat dan kontak
-  doc.setFontSize(10);
-  doc.text('Jl. Cempaka No.79 RT 01 RW 08 Sukahati, Cibinong', 105, 30, { align: 'center' });
-  doc.text('Kontak Pengelola: 087722667913', 105, 36, { align: 'center' });
-
-  // Hitung periode sewa
-  let periodeSewa = '';
+  // ---- Periode sewa otomatis (dipertahankan dari versi lama) ----
+  let periodeSewa = "";
   try {
     const parseYMD = (s: string) => {
-      const [y, m, d] = s.split('-').map((v) => parseInt(v, 10));
+      const [y, m, d] = s.split("-").map((v) => parseInt(v, 10));
       return new Date(y, (m || 1) - 1, d || 1);
     };
 
     const monthsMap: { [key: string]: number } = {
-      "Januari": 0, "Februari": 1, "Maret": 2, "April": 3, "Mei": 4, "Juni": 5,
-      "Juli": 6, "Agustus": 7, "September": 8, "Oktober": 9, "November": 10, "Desember": 11
+      Januari: 0, Februari: 1, Maret: 2, April: 3, Mei: 4, Juni: 5,
+      Juli: 6, Agustus: 7, September: 8, Oktober: 9, November: 10, Desember: 11,
     };
 
     const masuk = parseYMD(tanggalMasuk);
     const bayar = parseYMD(tanggalPelunasan);
 
-    const rentMonth = (bulanSewa && monthsMap[bulanSewa] !== undefined)
-      ? monthsMap[bulanSewa]
-      : bayar.getMonth();
+    const rentMonth =
+      bulanSewa && monthsMap[bulanSewa] !== undefined ? monthsMap[bulanSewa] : bayar.getMonth();
 
     let rentYear = bayar.getFullYear();
     if (bayar.getMonth() === 11 && rentMonth === 0) rentYear += 1;
@@ -71,55 +79,72 @@ export function generateKwitansiPelunasanPDF({
     const mulai = new Date(rentYear, rentMonth, masuk.getDate());
     const akhir = new Date(rentYear, rentMonth + 1, masuk.getDate());
     const formatTanggal = (tgl: Date) =>
-      tgl.getDate() + ' ' + tgl.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
+      tgl.getDate() + " " + tgl.toLocaleString("id-ID", { month: "long", year: "numeric" });
     periodeSewa = `${formatTanggal(mulai)} - ${formatTanggal(akhir)}`;
   } catch {
-    periodeSewa = bulanSewa || '-';
+    periodeSewa = bulanSewa || "-";
   }
 
-  // Tabel data pelunasan
-  autoTable(doc, {
-    startY: 50,
-    head: [['Nama Penyewa', 'Kamar', 'Periode Sewa', 'DP', 'Pelunasan', 'Total', 'Tanggal', 'Metode']],
-    body: [[
-      namaPenyewa,
-      kamar,
-      periodeSewa,
-      nominalDP,
-      nominalPelunasan,
-      totalHarga,
-      tanggalPelunasan,
-      metodePembayaran,
-    ]],
-    theme: 'grid',
-    headStyles: { fillColor: [0, 123, 255] },
-    styles: { halign: 'center', fontSize: 8 },
+  // Logo: utamakan upload dari pengaturan, kalau tidak ada pakai logo bawaan.
+  let logo = logoBase64 || undefined;
+  if (brand.logo_url) {
+    logo = (await imageUrlToDataUrl(brand.logo_url)) || undefined;
+  }
+
+  // ---- Tata letak ----
+  const top = drawBrandHeader(doc, {
+    logoBase64: logo,
+    brand: brand.business_name,
+    tagline: brand.tagline,
+    address: brand.address,
+    contact: brand.phone,
   });
 
-  // Stempel bulat biru "LUNAS"
-  const stampX = 170;
-  const stampY = 100;
+  let y = docTitleBlock(doc, {
+    title: brand.labels.pelunasan.title,
+    subtitle: brand.labels.pelunasan.subtitle,
+    startY: top + 8,
+  });
 
-  doc.setDrawColor(0, 102, 204);
-  doc.setLineWidth(1.2);
-  doc.circle(stampX + 15, stampY + 15, 15, 'S');
+  y = kvSection(doc, y, [
+    ["Nama Penyewa", namaPenyewa],
+    ["Kamar", kamarLabel(kamar)],
+    ["Periode Sewa", periodeSewa],
+    ["Tanggal Pelunasan", formatTanggalID(tanggalPelunasan)],
+    ["Metode Pembayaran", metodePembayaran],
+  ]);
 
-  doc.setFontSize(12);
-  doc.setTextColor(0, 102, 204);
-  doc.setFont('helvetica', 'bold');
-  doc.text('LUNAS', stampX + 15, stampY + 13, { align: 'center' });
+  y = kvSection(doc, y, [
+    ["DP (dibayar sebelumnya)", nominalDP],
+    ["Pelunasan Sekarang", nominalPelunasan],
+  ], { highlightRows: [1] });
 
-  doc.setFontSize(10);
-  doc.setTextColor(200, 0, 0);
-  doc.text('Hiraya Kost', stampX + 15, stampY + 22, { align: 'center' });
+  y = amountBand(doc, y + 3, "Total Harga Sewa", totalHarga);
 
-  // Reset warna
-  doc.setTextColor(0, 0, 0);
-  doc.setFont('helvetica', 'normal');
+  y = noteText(
+    doc,
+    `Pembayaran lunas: ${namaPenyewa} (${kamarLabel(kamar)}) telah menjadi penghuni aktif.`,
+    y + 4
+  );
+  y += 4;
 
-  // Tanda tangan
-  doc.text('Pengelola Kost', 160, 110);
-  doc.text('_____________________', 150, 128);
+  const signatureLine = Math.max(y + 10, 195);
+  signatureColumns(doc, signatureLine, { left: "Penerima", right: "Pengelola Kost" });
+
+  // Tanda tangan digital (jika diunggah) tetap disertai stempel bulat.
+  if (brand.signature_url) {
+    const sig = await imageUrlToDataUrl(brand.signature_url);
+    if (sig) {
+      drawManagerSignature(doc, sig, { centerX: 150, lineY: signatureLine, maxWidth: 42 });
+    }
+  }
+  stampRound(doc, 174, signatureLine - 11, {
+    text: "LUNAS",
+    sub: brand.business_name,
+    radius: 15,
+  });
+
+  drawFooter(doc, brand.labels.pelunasan.footer);
 
   return { doc, periodeSewa };
 }

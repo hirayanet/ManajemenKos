@@ -35,11 +35,14 @@ const Dashboard = () => {
         if (roomsError) throw roomsError;
         
         // Get active residents
+        const residentsQuery = supabase
+          .from("residents")
+          .select("*, rooms(room_number)")
+          .eq("status_penghuni", "Aktif");
 
         let residents;
         try {
-          const { data: residentsData, error } = await residentsQuery
-            .eq("status_penghuni", "Aktif");
+          const { data: residentsData, error } = await residentsQuery;
           if (error) throw error;
           residents = residentsData;
 

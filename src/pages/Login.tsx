@@ -40,10 +40,12 @@ const Login = () => {
       }
 
       // Store admin session in localStorage
+      const role = (admin as unknown as { role?: string }).role;
       localStorage.setItem("admin_session", JSON.stringify({
         id: admin.id,
         email: admin.email,
-        name: admin.name
+        name: admin.name,
+        role: role === "pengelola" ? "pengelola" : "pemilik"
       }));
 
       toast({

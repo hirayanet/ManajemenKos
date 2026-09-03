@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -37,7 +38,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
-import { PlusCircle, Edit, Trash2, KeyRound, Shield, MoreVertical, Mail, CalendarDays } from "lucide-react";
+import { PlusCircle, Edit, Trash2, KeyRound, Shield, MoreVertical, Mail, CalendarDays, Crown } from "lucide-react";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import bcrypt from "bcryptjs";
 
@@ -45,7 +46,24 @@ interface Admin {
   id: string;
   email: string;
   name: string;
+  role: string;
   created_at: string;
+}
+
+function RoleBadge({ role, className = "" }: { role?: string; className?: string }) {
+  const isPemilik = role === "pemilik";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 font-semibold whitespace-nowrap ${
+        isPemilik
+          ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+          : "border-slate-200 bg-slate-100 text-slate-600"
+      } ${className}`}
+    >
+      {isPemilik ? <Crown className="h-3 w-3" /> : <Shield className="h-3 w-3" />}
+      {isPemilik ? "Pemilik" : "Pengelola"}
+    </span>
+  );
 }
 
 export default function AdminManagement() {
@@ -63,6 +81,7 @@ export default function AdminManagement() {
     name: "",
     email: "",
     password: "",
+    role: "pengelola",
   });
   const [passwordData, setPasswordData] = useState({
     password: "",
@@ -114,6 +133,7 @@ export default function AdminManagement() {
         name: formData.name,
         email: formData.email,
         password_hash: passwordHash,
+        role: formData.role,
       });
 
       if (error) {
@@ -128,7 +148,7 @@ export default function AdminManagement() {
         description: `Admin "${formData.name}" telah dibuat`,
       });
       setIsDialogOpen(false);
-      setFormData({ name: "", email: "", password: "" });
+      setFormData({ name: "", email: "", password: "", role: "pengelola" });
       fetchAdmins();
     } catch (error: any) {
       toast({
@@ -156,6 +176,7 @@ export default function AdminManagement() {
       const updateData: Record<string, string> = {
         name: formData.name,
         email: formData.email,
+        role: formData.role,
       };
 
       // Only update password if provided
@@ -181,7 +202,7 @@ export default function AdminManagement() {
       });
       setIsDialogOpen(false);
       setSelectedAdmin(null);
-      setFormData({ name: "", email: "", password: "" });
+      setFormData({ name: "", email: "", password: "", role: "pengelola" });
       fetchAdmins();
     } catch (error: any) {
       toast({
@@ -288,6 +309,7 @@ export default function AdminManagement() {
       name: admin.name,
       email: admin.email,
       password: "",
+      role: admin.role || "pengelola",
     });
     setIsDialogOpen(true);
   };
@@ -314,7 +336,7 @@ export default function AdminManagement() {
         </div>
         <Button className="w-full sm:w-auto shrink-0" onClick={() => {
           setSelectedAdmin(null);
-          setFormData({ name: "", email: "", password: "" });
+          setFormData({ name: "", email: "", password: "", role: "pengelola" });
           setIsDialogOpen(true);
         }}>
           <PlusCircle className="h-4 w-4 mr-2" />
@@ -363,15 +385,7 @@ export default function AdminManagement() {
                         </div>
                       </div>
                       <div className="mt-3 flex items-center justify-between gap-2">
-                        {isYou ? (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-                            <Shield className="h-3 w-3" /> Aktif (Anda)
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                            <Shield className="h-3 w-3" /> Admin
-                          </span>
-                        )}
+                        <RoleBadge role={admin.role} className="text-[11px] px-2 py-0.5" />
                         <span className="text-[11px] text-muted-foreground flex items-center gap-1 shrink-0">
                           <CalendarDays className="h-3 w-3" />
                           {format(new Date(admin.created_at), "d MMM yyyy", { locale: localeId })}
@@ -401,7 +415,7 @@ export default function AdminManagement() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-[260px]">Admin</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Jabatan</TableHead>
                       <TableHead>Dibuat</TableHead>
                       <TableHead className="text-right">Aksi</TableHead>
                     </TableRow>
@@ -421,15 +435,14 @@ export default function AdminManagement() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            {isYou ? (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 whitespace-nowrap">
-                                <Shield className="h-3 w-3" /> Aktif (Anda)
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 whitespace-nowrap">
-                                <Shield className="h-3 w-3" /> Admin
-                              </span>
-                            )}
+                            <div className="flex items-center gap-1.5">
+                              <RoleBadge role={admin.role} className="text-xs" />
+                              {isYou && (
+                                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 whitespace-nowrap">
+                                  Anda
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                             {format(new Date(admin.created_at), "d MMM yyyy", { locale: localeId })}
@@ -485,7 +498,7 @@ export default function AdminManagement() {
           setIsDialogOpen(open);
           if (!open) {
             setSelectedAdmin(null);
-            setFormData({ name: "", email: "", password: "" });
+            setFormData({ name: "", email: "", password: "", role: "pengelola" });
           }
         }}
       >
@@ -518,6 +531,27 @@ export default function AdminManagement() {
                   setFormData({ ...formData, email: e.target.value })
                 }
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="admin-role">Jabatan</Label>
+              <Select
+                value={formData.role}
+                onValueChange={(v) => setFormData({ ...formData, role: v })}
+                disabled={!!selectedAdmin && selectedAdmin.id === currentAdmin.id}
+              >
+                <SelectTrigger id="admin-role">
+                  <SelectValue placeholder="Pilih jabatan" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pemilik">Pemilik/Admin — akses semua menu</SelectItem>
+                  <SelectItem value="pengelola">Pengelola — tanpa Manajemen Admin & Pengaturan</SelectItem>
+                </SelectContent>
+              </Select>
+              {!!selectedAdmin && selectedAdmin.id === currentAdmin.id && (
+                <p className="text-xs text-muted-foreground">
+                  Jabatan akun sendiri tidak dapat diubah.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="admin-password">

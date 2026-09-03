@@ -1,147 +1,150 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import jsPDF from "jspdf";
+import {
+  drawBrandHeader,
+  docTitleBlock,
+  kvSection,
+  amountBand,
+  noteText,
+  signatureColumns,
+  stampRound,
+  drawFooter,
+  formatTanggalID,
+} from "./kwitansiUi";
+import { drawManagerSignature } from "./kwitansiSign";
+import { fetchBrandSettings, imageUrlToDataUrl, type BrandSettings } from "./branding";
+
+/** Rapi-kan label kamar agar tidak dobel: "Kamar 2" / "2" → "Kamar 2". */
+function kamarLabel(value: string): string {
+  const cleaned = (value || "").trim().replace(/^kamar\s*/i, "");
+  return cleaned ? `Kamar ${cleaned}` : "Kamar";
+}
 
 /**
- * Generate a payment receipt PDF for kosan
- * @param {Object} data - Payment data
- * @param {string} data.namaPenyewa
- * @param {string} data.periodeSewa
- * @param {string} data.nominal
- * @param {string} data.tanggal
- * @param {string} data.logoBase64 - Logo in base64 format
+ * Generate a payment receipt PDF — desain modern & profesional,
+ * memakai identitas bisnis dari pengaturan (nama, kontak, logo,
+ * tanda tangan digital, label kwitansi).
  */
-export function generateKwitansiPDF({
-  namaPenyewa,
-  tanggalMasuk,
-  nominal,
-  tanggal,
-  logoBase64,
-  kamar,
-  metodePembayaran,
-  bulanSewa,
-  periodeSewa: periodeSewaOverride
-}: {
-  namaPenyewa: string;
-  tanggalMasuk: string; // format yyyy-mm-dd
-  nominal: string;
-  tanggal: string; // tanggal pembayaran, format yyyy-mm-dd
-  logoBase64: string;
-  kamar: string;
-  metodePembayaran: string;
-  bulanSewa?: string;
-  periodeSewa?: string; // bila diisi (format "1 Agustus 2026 - 3 Agustus 2026"), dipakai langsung
-}): { doc: jsPDF, periodeSewa: string } {
+export async function generateKwitansiPDF(
+  {
+    namaPenyewa,
+    tanggalMasuk,
+    nominal,
+    tanggal,
+    logoBase64,
+    kamar,
+    metodePembayaran,
+    bulanSewa,
+    periodeSewa: periodeSewaOverride,
+  }: {
+    namaPenyewa: string;
+    tanggalMasuk: string; // format yyyy-mm-dd
+    nominal: string;
+    tanggal: string; // tanggal pembayaran, format yyyy-mm-dd
+    logoBase64: string;
+    kamar: string;
+    metodePembayaran: string;
+    bulanSewa?: string;
+    periodeSewa?: string; // bila diisi (format "1 Agustus 2026 - 3 Agustus 2026"), dipakai langsung
+  },
+  overrides?: { brand?: BrandSettings }
+): Promise<{ doc: jsPDF; periodeSewa: string }> {
   const doc = new jsPDF();
 
-  // Logo
-  if (logoBase64) {
-    doc.addImage(logoBase64, 'PNG', 15, 10, 25, 25);
-  }
+  // ---- Identitas dari pengaturan (boleh ditimpa untuk pratinjau) ----
+  const brand = overrides?.brand ?? (await fetchBrandSettings());
 
-  // Header
-  doc.setFontSize(18);
-  doc.text('BUKTI PEMBAYARAN HIRAYA KOST', 105, 22, { align: 'center' });
-
-  // Alamat dan kontak
-  doc.setFontSize(10);
-  doc.text('Jl. Cempaka No.79 RT 01 RW 08 Sukahati, Cibinong', 105, 30, { align: 'center' });
-  doc.text('Kontak Pengelola: 087722667913', 105, 36, { align: 'center' });
-
-
-
-  // Hitung periode sewa otomatis
-  // tanggalMasuk: tanggal masuk kos (yyyy-mm-dd)
-  // tanggal: tanggal pembayaran (yyyy-mm-dd)
-  let computedPeriodeSewa = '';
+  // ---- Periode sewa otomatis (dipertahankan dari versi lama) ----
+  let computedPeriodeSewa = "";
   try {
-    // Parse tanggal secara manual untuk menghindari pergeseran timezone
     const parseYMD = (s: string) => {
-      const [y, m, d] = s.split('-').map((v) => parseInt(v, 10));
-      // Gunakan Date(year, monthIndex, day) agar dianggap waktu lokal tanpa offset UTC
+      const [y, m, d] = s.split("-").map((v) => parseInt(v, 10));
       return new Date(y, (m || 1) - 1, d || 1);
     };
 
     const masuk = parseYMD(tanggalMasuk);
     const bayar = parseYMD(tanggal);
-    // Validasi tanggal
-    if (
-      !tanggalMasuk || !tanggal ||
-      isNaN(masuk.getTime()) || isNaN(bayar.getTime())
-    ) {
-      throw new Error('Tanggal tidak valid');
+    if (!tanggalMasuk || !tanggal || isNaN(masuk.getTime()) || isNaN(bayar.getTime())) {
+      throw new Error("Tanggal tidak valid");
     }
 
     const monthsMap: { [key: string]: number } = {
-      "Januari": 0, "Februari": 1, "Maret": 2, "April": 3, "Mei": 4, "Juni": 5,
-      "Juli": 6, "Agustus": 7, "September": 8, "Oktober": 9, "November": 10, "Desember": 11
+      Januari: 0, Februari: 1, Maret: 2, April: 3, Mei: 4, Juni: 5,
+      Juli: 6, Agustus: 7, September: 8, Oktober: 9, November: 10, Desember: 11,
     };
 
-    const rentMonth = (bulanSewa && monthsMap[bulanSewa] !== undefined) 
-      ? monthsMap[bulanSewa] 
-      : bayar.getMonth();
+    const rentMonth =
+      bulanSewa && monthsMap[bulanSewa] !== undefined ? monthsMap[bulanSewa] : bayar.getMonth();
 
     let rentYear = bayar.getFullYear();
-    // Jika bayar di Desember tapi untuk Januari, tahun sewa maju 1 tahun
-    if (bayar.getMonth() === 11 && rentMonth === 0) {
-      rentYear += 1;
-    }
-    // Jika bayar di Januari tapi untuk Desember, tahun sewa mundur 1 tahun
-    else if (bayar.getMonth() === 0 && rentMonth === 11) {
-      rentYear -= 1;
-    }
+    if (bayar.getMonth() === 11 && rentMonth === 0) rentYear += 1;
+    else if (bayar.getMonth() === 0 && rentMonth === 11) rentYear -= 1;
 
-    // Periode sewa berdasarkan bulan sewa (rentMonth) dan tanggal masuk sebagai acuan tanggal
     const mulai = new Date(rentYear, rentMonth, masuk.getDate());
     const akhir = new Date(rentYear, rentMonth + 1, masuk.getDate());
 
-    // Format tanggal: 5 Agustus 2025
-    const formatTanggal = (tgl: Date) => tgl.getDate() + ' ' + tgl.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
+    const formatTanggal = (tgl: Date) =>
+      tgl.getDate() + " " + tgl.toLocaleString("id-ID", { month: "long", year: "numeric" });
     computedPeriodeSewa = `${formatTanggal(mulai)} - ${formatTanggal(akhir)}`;
-  } catch (e) {
-    computedPeriodeSewa = '';
+  } catch {
+    computedPeriodeSewa = "";
   }
 
-  // Periode dari pemanggil (mis. struk mobile) lebih diutamakan agar preview dan
-  // hasil unduh konsisten; kalau tidak ada, pakai hasil hitung otomatis di atas.
-  const periodeSewa = periodeSewaOverride || computedPeriodeSewa || '-';
+  const periodeSewa = periodeSewaOverride || computedPeriodeSewa || "-";
 
-  // Data pembayaran
-  autoTable(doc, {
-    startY: 50,
-    head: [['Nama Penyewa', 'Kamar', 'Periode Sewa', 'Nominal', 'Tanggal', 'Metode Pembayaran']],
-    body: [[namaPenyewa, kamar, periodeSewa, nominal, tanggal, metodePembayaran]],
-    theme: 'grid',
-    headStyles: { fillColor: [0, 123, 255] },
-    styles: { halign: 'center' },
+  // Logo: utamakan upload dari pengaturan, kalau tidak ada pakai logo bawaan.
+  let logo = logoBase64 || undefined;
+  if (brand.logo_url) {
+    logo = (await imageUrlToDataUrl(brand.logo_url)) || undefined;
+  }
+
+  // ---- Tata letak ----
+  const top = drawBrandHeader(doc, {
+    logoBase64: logo,
+    brand: brand.business_name,
+    tagline: brand.tagline,
+    address: brand.address,
+    contact: brand.phone,
   });
 
-  // Stempel bulat di atas garis tanda tangan
-  const stampX = 170; // kanan bawah, dekat tanda tangan
-  const stampY = 100; // tepat di atas garis tanda tangan
+  let y = docTitleBlock(doc, {
+    title: brand.labels.payment.title,
+    subtitle: brand.labels.payment.subtitle,
+    startY: top + 8,
+  });
 
-  // Gambar lingkaran biru
-  doc.setDrawColor(0, 102, 204); // Biru
-  doc.setLineWidth(1.2);
-  doc.circle(stampX + 15, stampY + 15, 15, 'S'); // x, y, radius, style
+  y = kvSection(doc, y, [
+    ["Nama Penyewa", namaPenyewa],
+    ["Kamar", kamarLabel(kamar)],
+    ["Periode Sewa", periodeSewa],
+    ["Tanggal Pembayaran", formatTanggalID(tanggal)],
+    ["Metode Pembayaran", metodePembayaran],
+  ]);
 
-  // Tulisan 'LUNAS' warna biru
-  doc.setFontSize(12);
-  doc.setTextColor(0, 102, 204);
-  doc.setFont('helvetica', 'bold');
-  doc.text('LUNAS', stampX + 15, stampY + 13, { align: 'center' });
+  y = amountBand(doc, y + 4, "Total Pembayaran", nominal);
 
-  // Tulisan 'Hiraya Kost' warna merah di bawahnya
-  doc.setFontSize(10);
-  doc.setTextColor(200, 0, 0);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Hiraya Kost', stampX + 15, stampY + 22, { align: 'center' });
+  y = noteText(
+    doc,
+    `Pembayaran sewa periode ${periodeSewa} atas nama ${namaPenyewa} (${kamarLabel(kamar)}) telah diterima.`,
+    y + 4
+  );
+  y += 4;
 
-  // Kembalikan warna ke hitam untuk konten lain
-  doc.setTextColor(0, 0, 0);
+  const signatureLine = Math.max(y + 10, 192);
+  signatureColumns(doc, signatureLine, { left: "Penerima", right: "Pengelola Kost" });
 
-  // Tanda tangan
-  doc.text('Pengelola Kost', 160, 110);
-  doc.text('_____________________', 150, 128);
+  // Tanda tangan digital (jika diunggah) tetap disertai stempel bulat.
+  if (brand.signature_url) {
+    const sig = await imageUrlToDataUrl(brand.signature_url);
+    if (sig) {
+      drawManagerSignature(doc, sig, { centerX: 150, lineY: signatureLine, maxWidth: 42 });
+    }
+  }
+  stampRound(doc, 174, signatureLine - 11, {
+    text: "LUNAS",
+    sub: brand.business_name,
+    radius: 15,
+  });
 
+  drawFooter(doc, brand.labels.payment.footer);
   return { doc, periodeSewa };
 }

@@ -1,9 +1,11 @@
 /**
- * Generate a mobile-friendly kwitansi image (PNG) using Canvas API.
- * Bold, badge-driven design for maximum readability on mobile.
+ * Generate struk kwitansi mobile (PNG) via Canvas — untuk kwitansi
+ * Pembayaran, DP Reservasi, dan Pelunasan. Identitas bisnis mengikuti
+ * pengaturan aplikasi (nama, alamat, kontak).
  */
+import { fetchBrandSettings, type BrandSettings } from "./branding";
 
-interface KwitansiImageData {
+export interface KwitansiImageData {
   namaPenyewa: string;
   kamar: string;
   periodeSewa: string;
@@ -11,6 +13,23 @@ interface KwitansiImageData {
   tanggalBayar: string;
   metodePembayaran: string;
   logoBase64?: string;
+}
+
+export interface KwitansiDPImageData {
+  namaCalon: string;
+  kamar: string;
+  tanggalDP: string;
+  deadlinePelunasan: string;
+  nominalDP: string;
+  metodePembayaran: string;
+}
+
+export interface KwitansiPelunasanImageData {
+  namaPenyewa: string;
+  kamar: string;
+  tanggalPelunasan: string;
+  nominalPelunasan: string;
+  metodePembayaran: string;
 }
 
 function roundRect(
@@ -28,6 +47,26 @@ function roundRect(
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
+}
+
+/** Gambar teks rata tengah, otomatis mengecil bila melebihi lebar maks. */
+function fitCentered(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  cx: number,
+  y: number,
+  maxWidth: number,
+  baseSize: number,
+  minSize = 10
+) {
+  let size = baseSize;
+  ctx.font = `bold ${size}px Arial, sans-serif`;
+  while (ctx.measureText(text).width > maxWidth && size > minSize) {
+    size -= 1;
+    ctx.font = `bold ${size}px Arial, sans-serif`;
+  }
+  ctx.textAlign = "center";
+  ctx.fillText(text, cx, y);
 }
 
 /** Draw a badge pill: colored background + white bold text */
@@ -82,7 +121,17 @@ function drawBoldField(
   ctx.fillText(value, rightX, y);
 }
 
-export function generateKwitansiImage(data: KwitansiImageData): Promise<Blob> {
+interface StrukLayout {
+  headerLabel: string;
+  rowsBefore: [string, string][];
+  amountLabel: string;
+  amountValue: string;
+  rowsAfter: [string, string][];
+  badgeText: string;
+  badgeBg: string;
+}
+
+async function renderStruk(layout: StrukLayout, brand: BrandSettings): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const W = 500;
     const H = 780;
@@ -106,37 +155,37 @@ export function generateKwitansiImage(data: KwitansiImageData): Promise<Blob> {
     ctx.fillStyle = "#ffffff";
     ctx.fill();
 
-    // ── Header bar (blue gradient) ──
+    // ── Header bar (blue) ──
     const hdrH = 90;
     roundRect(ctx, cx, cy, cw, hdrH, 20);
     ctx.fillStyle = "#1d4ed8";
     ctx.fill();
-    ctx.fillStyle = "#1d4ed8";
     ctx.fillRect(cx, cy + 70, cw, 20);
 
     // Title
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "center";
     ctx.font = "bold 20px Arial, sans-serif";
-    ctx.fillText("BUKTI PEMBAYARAN", W / 2, cy + 34);
-    ctx.font = "bold 15px Arial, sans-serif";
-    ctx.fillStyle = "#bfdbfe";
-    ctx.fillText("HIRAYA KOST", W / 2, cy + 56);
+    fitCentered(ctx, layout.headerLabel, W / 2, cy + 32, cw - 40, 20, 12);
 
-    // Address
+    // Nama bisnis
+    ctx.fillStyle = "#bfdbfe";
+    fitCentered(ctx, brand.business_name, W / 2, cy + 54, cw - 40, 15, 10);
+
+    // Alamat
     ctx.fillStyle = "#93c5fd";
-    ctx.font = "11px Arial, sans-serif";
-    ctx.fillText("Jl. Cempaka No.79 RT 01 RW 08 Sukahati, Cibinong", W / 2, cy + 76);
+    fitCentered(ctx, brand.address, W / 2, cy + 74, cw - 32, 11, 8);
 
     // ── Content area ──
     const padX = cx + 28;
     const padR = cx + cw - 28;
     let y = cy + hdrH + 20;
 
-    // Fields
-    drawBoldField(ctx, "Nama Penyewa", data.namaPenyewa, padX, padR, y); y += 40;
-    drawBoldField(ctx, "Kamar", data.kamar, padX, padR, y); y += 40;
-    drawBoldField(ctx, "Periode Sewa", data.periodeSewa, padX, padR, y); y += 40;
+    // Field rows before amount
+    layout.rowsBefore.forEach(([label, value]) => {
+      drawBoldField(ctx, label, value, padX, padR, y);
+      y += 40;
+    });
 
     // ── Divider ──
     y += 10;
@@ -162,22 +211,25 @@ export function generateKwitansiImage(data: KwitansiImageData): Promise<Blob> {
     ctx.fillStyle = "#3b82f6";
     ctx.font = "bold 12px Arial, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("NOMINAL PEMBAYARAN", W / 2, y + 22);
+    fitCentered(ctx, layout.amountLabel, W / 2, y + 22, cw - 64, 12, 9);
 
     ctx.fillStyle = "#1e40af";
     ctx.font = "bold 28px Arial, sans-serif";
-    ctx.fillText(data.nominal, W / 2, y + 56);
+    fitCentered(ctx, layout.amountValue, W / 2, y + 56, cw - 80, 28, 16);
 
     y += amtH + 16;
 
-    // More fields
-    drawBoldField(ctx, "Tanggal Bayar", data.tanggalBayar, padX, padR, y); y += 40;
-    drawBoldField(ctx, "Metode Pembayaran", data.metodePembayaran, padX, padR, y); y += 10;
+    // Field rows after amount
+    layout.rowsAfter.forEach(([label, value]) => {
+      drawBoldField(ctx, label, value, padX, padR, y);
+      y += 40;
+    });
+    y += 10;
 
     // ── Badge row ──
     y += 16;
     const badgeY = y + 12;
-    drawBadge(ctx, "LUNAS", W / 2, badgeY, "#16a34a", "#ffffff", 16);
+    drawBadge(ctx, layout.badgeText, W / 2, badgeY, layout.badgeBg, "#ffffff", 16);
     y += 44;
 
     // ── Divider ──
@@ -214,7 +266,7 @@ export function generateKwitansiImage(data: KwitansiImageData): Promise<Blob> {
     ctx.fillText("Dokumen ini merupakan bukti pembayaran yang sah.", W / 2, y);
     ctx.font = "bold 11px Arial, sans-serif";
     ctx.fillStyle = "#64748b";
-    ctx.fillText("Kontak Pengelola: 087722667913", W / 2, y + 18);
+    fitCentered(ctx, `Kontak Pengelola: ${brand.phone}`, W / 2, y + 18, cw - 32, 11, 8);
 
     // ── Convert to blob ──
     canvas.toBlob(
@@ -228,8 +280,88 @@ export function generateKwitansiImage(data: KwitansiImageData): Promise<Blob> {
   });
 }
 
+async function resolveBrand(overrides?: { brand?: BrandSettings }): Promise<BrandSettings> {
+  return overrides?.brand ?? (await fetchBrandSettings());
+}
+
+/** Struk kwitansi pembayaran bulanan/harian (alur lama, API tetap). */
+export async function generateKwitansiImage(
+  data: KwitansiImageData,
+  overrides?: { brand?: BrandSettings }
+): Promise<Blob> {
+  const brand = await resolveBrand(overrides);
+  return renderStruk(
+    {
+      headerLabel: "BUKTI PEMBAYARAN",
+      rowsBefore: [
+        ["Nama Penyewa", data.namaPenyewa],
+        ["Kamar", data.kamar],
+        ["Periode Sewa", data.periodeSewa],
+      ],
+      amountLabel: "NOMINAL PEMBAYARAN",
+      amountValue: data.nominal,
+      rowsAfter: [
+        ["Tanggal Bayar", data.tanggalBayar],
+        ["Metode Pembayaran", data.metodePembayaran],
+      ],
+      badgeText: "LUNAS",
+      badgeBg: "#16a34a",
+    },
+    brand
+  );
+}
+
+/** Struk kwitansi Down Payment (DP). */
+export async function generateKwitansiDPImage(
+  data: KwitansiDPImageData,
+  overrides?: { brand?: BrandSettings }
+): Promise<Blob> {
+  const brand = await resolveBrand(overrides);
+  return renderStruk(
+    {
+      headerLabel: "BUKTI DOWN PAYMENT",
+      rowsBefore: [
+        ["Nama Calon Penyewa", data.namaCalon],
+        ["Kamar", data.kamar],
+        ["Tanggal DP", data.tanggalDP],
+        ["Deadline Pelunasan", data.deadlinePelunasan],
+      ],
+      amountLabel: "NOMINAL DP",
+      amountValue: data.nominalDP,
+      rowsAfter: [["Metode Pembayaran", data.metodePembayaran]],
+      badgeText: "DP DITERIMA",
+      badgeBg: "#ea580c",
+    },
+    brand
+  );
+}
+
+/** Struk kwitansi Pelunasan (setelah DP). */
+export async function generateKwitansiPelunasanImage(
+  data: KwitansiPelunasanImageData,
+  overrides?: { brand?: BrandSettings }
+): Promise<Blob> {
+  const brand = await resolveBrand(overrides);
+  return renderStruk(
+    {
+      headerLabel: "BUKTI PELUNASAN",
+      rowsBefore: [
+        ["Nama Penyewa", data.namaPenyewa],
+        ["Kamar", data.kamar],
+        ["Tanggal Pelunasan", data.tanggalPelunasan],
+      ],
+      amountLabel: "NOMINAL PELUNASAN",
+      amountValue: data.nominalPelunasan,
+      rowsAfter: [["Metode Pembayaran", data.metodePembayaran]],
+      badgeText: "LUNAS",
+      badgeBg: "#16a34a",
+    },
+    brand
+  );
+}
+
 /**
- * Download the kwitansi image as PNG
+ * Download the kwitansi payment image as PNG
  */
 export async function downloadKwitansiImage(
   data: KwitansiImageData,

@@ -15,8 +15,9 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { isOwner } from "@/lib/roles";
 // Tambahkan import untuk icon History
-import { History } from "lucide-react";
+import { History, Settings2 } from "lucide-react";
 
 const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
@@ -27,10 +28,12 @@ const menuItems = [
   { title: "Laporan", url: "/reports", icon: FileText },
   { title: "Riwayat Penghuni", url: "/resident-history", icon: History },
   { title: "Manajemen Admin", url: "/admin-management", icon: Shield },
+  { title: "Pengaturan", url: "/settings", icon: Settings2 },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
+  const isOwnerUser = isOwner();
   const collapsed = state === "collapsed";
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -74,7 +77,13 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
+              {menuItems
+                .filter(
+                  (item) =>
+                    isOwnerUser ||
+                    (item.url !== "/admin-management" && item.url !== "/settings")
+                )
+                .map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink to={item.url} end className={getNavCls}>

@@ -34,8 +34,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { generateKwitansiDPPDF } from "@/lib/kwitansiDPpdf";
 import { generateKwitansiPelunasanPDF } from "@/lib/kwitansiPelunasanPDF";
-import { jsPDFToBlob } from "@/lib/pdfUtils";
-import { uploadPDFtoSupabase } from "@/lib/supabaseUpload";
 import logoImg from "@/assets/hr_logo_base64";
 
 interface Room {
@@ -378,7 +376,7 @@ export default function DPReservasi() {
 
   // === KWITANSI DP ===
   const handleKwitansiDP = async (reservasi: DPReservasi, mode: "download" | "share") => {
-    const { doc } = generateKwitansiDPPDF({
+    const { doc } = await generateKwitansiDPPDF({
       namaCalon: reservasi.nama_calon,
       kamar: reservasi.rooms?.room_number ? reservasi.rooms.room_number.toString() : "",
       nominalDP: formatRupiah(reservasi.nominal_dp),
@@ -395,28 +393,25 @@ export default function DPReservasi() {
       return;
     }
 
-    // Share
+    // Share — tautan ke halaman pratinjau (gambar & PDF), alur sama seperti kwitansi pembayaran
     setUploadingId(reservasi.id);
     try {
-      const blob = await jsPDFToBlob(doc);
-      const fileName = `dp-${reservasi.nama_calon.replace(/\s+/g, "_")}-${reservasi.tanggal_dp}-${Date.now()}.pdf`;
-      const url = await uploadPDFtoSupabase(blob, fileName);
-      if (!url) throw new Error("Gagal upload PDF");
+      const baseUrl = window.location.origin;
+      const url = `${baseUrl}/kwitansi-dp/${reservasi.id}`;
 
       await supabase.from("dp_reservasi").update({ receipt_url_dp: url }).eq("id", reservasi.id);
 
       const deadlineFormatted = formatTanggalID(reservasi.deadline_pelunasan);
       const shareText =
-        `Berikut bukti Down Payment (DP) kost untuk:\n\n` +
-        `Nama: ${reservasi.nama_calon}\n` +
-        `Kamar: ${reservasi.rooms?.room_number || "-"}\n` +
-        `Nominal DP: ${formatRupiah(reservasi.nominal_dp)}\n` +
-        `Sisa Pelunasan: ${formatRupiah(reservasi.nominal_pelunasan)}\n` +
-        `Deadline Pelunasan: ${deadlineFormatted}\n\n` +
-        `⚠️ Mohon lakukan pelunasan sebelum tanggal ${deadlineFormatted}.\n` +
-        `DP akan hangus jika melewati batas waktu.\n\n` +
-        `Silakan unduh bukti DP pada link berikut:\n${url}\n\n` +
-        `Terima kasih,\nPengelola Hiraya Kost`;
+        `Berikut bukti Down Payment (DP) kost:\n\n` +
+        `🏠 Nama: ${reservasi.nama_calon}\n` +
+        `🚪 Kamar: ${reservasi.rooms?.room_number != null ? `Kamar ${reservasi.rooms.room_number}` : "-"}\n` +
+        `💰 Nominal DP: ${formatRupiah(reservasi.nominal_dp)}\n` +
+        `💵 Sisa Pelunasan: ${formatRupiah(reservasi.nominal_pelunasan)}\n` +
+        `⏳ Deadline Pelunasan: ${deadlineFormatted}\n\n` +
+        `⚠️ Mohon lakukan pelunasan sebelum tanggal ${deadlineFormatted}. DP akan hangus jika melewati batas waktu.\n\n` +
+        `Silakan klik link berikut untuk melihat kwitansi:\n${url}\n\n` +
+        `Terima kasih telah melakukan pembayaran tepat waktu.\nSalam,\nPengelola Kos`;
 
       setShareModal({ url, text: shareText });
       setMobileSheetReservasi(null);
@@ -431,7 +426,7 @@ export default function DPReservasi() {
   const handleKwitansiPelunasan = async (reservasi: DPReservasi, mode: "download" | "share") => {
     if (!reservasi.tanggal_pelunasan) return;
 
-    const { doc, periodeSewa } = generateKwitansiPelunasanPDF({
+    const { doc, periodeSewa } = await generateKwitansiPelunasanPDF({
       namaPenyewa: reservasi.nama_calon,
       kamar: reservasi.rooms?.room_number ? reservasi.rooms.room_number.toString() : "",
       nominalDP: formatRupiah(reservasi.nominal_dp),
@@ -449,26 +444,24 @@ export default function DPReservasi() {
       return;
     }
 
-    // Share
+    // Share — tautan ke halaman pratinjau (gambar & PDF), alur sama seperti kwitansi pembayaran
     setUploadingId(reservasi.id + "_pelunasan");
     try {
-      const blob = await jsPDFToBlob(doc);
-      const fileName = `pelunasan-${reservasi.nama_calon.replace(/\s+/g, "_")}-${reservasi.tanggal_pelunasan}-${Date.now()}.pdf`;
-      const url = await uploadPDFtoSupabase(blob, fileName);
-      if (!url) throw new Error("Gagal upload PDF");
+      const baseUrl = window.location.origin;
+      const url = `${baseUrl}/kwitansi-lunas/${reservasi.id}`;
 
       await supabase.from("dp_reservasi").update({ receipt_url_pelunasan: url }).eq("id", reservasi.id);
 
       const shareText =
         `Berikut kwitansi pelunasan kost untuk periode: *${periodeSewa}*\n\n` +
-        `Nama: ${reservasi.nama_calon}\n` +
-        `Kamar: ${reservasi.rooms?.room_number || "-"}\n` +
-        `DP Sebelumnya: ${formatRupiah(reservasi.nominal_dp)}\n` +
-        `Pelunasan: ${formatRupiah(reservasi.nominal_pelunasan)}\n` +
-        `Total: ${formatRupiah(reservasi.harga_per_bulan)}\n` +
-        `Metode Pembayaran: ${reservasi.payment_method_pelunasan || "Tunai"}\n` +
-        `Tanggal Bayar: ${formatTanggalID(reservasi.tanggal_pelunasan)}\n\n` +
-        `Silakan unduh kwitansi pada link berikut: ${url}\n\n` +
+        `🏠 Nama: ${reservasi.nama_calon}\n` +
+        `🚪 Kamar: ${reservasi.rooms?.room_number != null ? `Kamar ${reservasi.rooms.room_number}` : "-"}\n` +
+        `💵 DP Sebelumnya: ${formatRupiah(reservasi.nominal_dp)}\n` +
+        `💰 Pelunasan: ${formatRupiah(reservasi.nominal_pelunasan)}\n` +
+        `🧾 Total: ${formatRupiah(reservasi.harga_per_bulan)}\n` +
+        `💳 Metode Pembayaran: ${reservasi.payment_method_pelunasan || "Tunai"}\n` +
+        `📆 Tanggal Bayar: ${formatTanggalID(reservasi.tanggal_pelunasan)}\n\n` +
+        `Silakan klik link berikut untuk melihat kwitansi:\n${url}\n\n` +
         `Terima kasih telah melakukan pembayaran tepat waktu.\nSalam,\nPengelola Kos`;
 
       setShareModal({ url, text: shareText });
@@ -1143,7 +1136,7 @@ export default function DPReservasi() {
                   className="w-full"
                   onClick={() => window.open(shareModal.url, "_blank")}
                 >
-                  🔗 Buka Link PDF
+                  🔗 Buka Pratinjau Kwitansi
                 </Button>
               </div>
             </div>

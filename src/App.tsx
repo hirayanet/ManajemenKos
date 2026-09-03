@@ -13,12 +13,15 @@ import Payments from "./pages/Payments";
 import Reports from "./pages/Reports";
 import Expenses from "./pages/Expenses";
 import AuthGuard from "./components/AuthGuard";
+import RoleGuard from "./components/RoleGuard";
 // Import halaman ResidentHistory
 import ResidentHistory from "./pages/ResidentHistory";
 import DPReservasi from "./pages/DPReservasi";
 import AdminManagement from "./pages/AdminManagement";
 import KwitansiView from "./pages/KwitansiView";
 import InstallApp from "./pages/InstallApp";
+import Settings from "./pages/Settings";
+import { KwitansiDPView, KwitansiLunasView } from "./pages/KwitansiReservasiView";
 
 const queryClient = new QueryClient();
 
@@ -84,7 +87,9 @@ const App = () => (
           <Route path="/admin-management" element={
             <AuthGuard>
               <Layout>
-                <AdminManagement />
+                <RoleGuard>
+                  <AdminManagement />
+                </RoleGuard>
               </Layout>
             </AuthGuard>
           } />
@@ -96,6 +101,17 @@ const App = () => (
             </AuthGuard>
           } />
           <Route path="/kwitansi/:id" element={<KwitansiView />} />
+          <Route path="/settings" element={
+            <AuthGuard>
+              <Layout>
+                <RoleGuard>
+                  <Settings />
+                </RoleGuard>
+              </Layout>
+            </AuthGuard>
+          } />
+          <Route path="/kwitansi-dp/:id" element={<KwitansiDPView />} />
+          <Route path="/kwitansi-lunas/:id" element={<KwitansiLunasView />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

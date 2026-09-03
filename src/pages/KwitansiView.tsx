@@ -108,7 +108,7 @@ export default function KwitansiView() {
   const handleDownloadPDF = async () => {
     if (!payment) return;
     try {
-      const { doc } = generateKwitansiPDF({
+      const { doc } = await generateKwitansiPDF({
         namaPenyewa: payment.residents?.full_name || "-",
         tanggalMasuk: payment.residents?.entry_date || "",
         nominal: `Rp ${payment.amount.toLocaleString("id-ID")}`,
