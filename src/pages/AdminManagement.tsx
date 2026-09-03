@@ -32,10 +32,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { PlusCircle, Edit, Trash2, KeyRound, Shield } from "lucide-react";
+import { format } from "date-fns";
+import { id as localeId } from "date-fns/locale";
+import { PlusCircle, Edit, Trash2, KeyRound, Shield, MoreVertical, Mail, CalendarDays } from "lucide-react";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import bcrypt from "bcryptjs";
 
 interface Admin {
@@ -302,14 +305,14 @@ export default function AdminManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Manajemen Admin</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-bold text-foreground">Manajemen Admin</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Kelola akun admin yang dapat mengakses sistem
           </p>
         </div>
-        <Button onClick={() => {
+        <Button className="w-full sm:w-auto shrink-0" onClick={() => {
           setSelectedAdmin(null);
           setFormData({ name: "", email: "", password: "" });
           setIsDialogOpen(true);
@@ -336,70 +339,141 @@ export default function AdminManagement() {
               Belum ada admin terdaftar
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nama</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Dibuat</TableHead>
-                  <TableHead className="text-right">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {admins.map((admin) => (
-                  <TableRow key={admin.id}>
-                    <TableCell className="font-medium">{admin.name}</TableCell>
-                    <TableCell>{admin.email}</TableCell>
-                    <TableCell>
-                      {admin.id === currentAdmin.id ? (
-                        <Badge variant="default">Aktif (Anda)</Badge>
-                      ) : (
-                        <Badge variant="secondary">Admin</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(admin.created_at).toLocaleDateString("id-ID", {
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      })}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openEditDialog(admin)}
-                          title="Edit admin"
-                        >
-                          <Edit className="h-4 w-4" />
+            <>
+              {/* Mobile card list */}
+              <div className="block md:hidden space-y-3">
+                {admins.map((admin) => {
+                  const isYou = admin.id === currentAdmin.id;
+                  return (
+                    <div key={admin.id} className="rounded-xl border border-muted p-3 bg-card text-card-foreground shadow-sm">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <InitialsAvatar name={admin.name} seed={admin.email} className="h-10 w-10 text-sm" />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate text-base font-semibold">{admin.name}</span>
+                            {isYou && (
+                              <span className="rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap">
+                                Anda
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Mail className="h-3 w-3" /> {admin.email}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        {isYou ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                            <Shield className="h-3 w-3" /> Aktif (Anda)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                            <Shield className="h-3 w-3" /> Admin
+                          </span>
+                        )}
+                        <span className="text-[11px] text-muted-foreground flex items-center gap-1 shrink-0">
+                          <CalendarDays className="h-3 w-3" />
+                          {format(new Date(admin.created_at), "d MMM yyyy", { locale: localeId })}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex items-center gap-2 border-t border-dashed pt-3">
+                        <Button variant="outline" size="sm" className="flex-1 rounded-full" onClick={() => openEditDialog(admin)}>
+                          <Edit className="h-3.5 w-3.5 mr-1.5" /> Edit
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openPasswordDialog(admin)}
-                          title="Reset password"
-                        >
-                          <KeyRound className="h-4 w-4" />
+                        <Button variant="outline" size="sm" className="flex-1 rounded-full bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 hover:text-amber-700" onClick={() => openPasswordDialog(admin)}>
+                          <KeyRound className="h-3.5 w-3.5 mr-1.5" /> Reset
                         </Button>
-                        {admin.id !== currentAdmin.id && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openDeleteDialog(admin)}
-                            title="Hapus admin"
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
+                        {!isYou && (
+                          <Button variant="outline" size="sm" className="flex-1 rounded-full bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20 hover:text-destructive" onClick={() => openDeleteDialog(admin)}>
+                            <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Hapus
                           </Button>
                         )}
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop/tablet table */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table className="min-w-[640px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[260px]">Admin</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Dibuat</TableHead>
+                      <TableHead className="text-right">Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {admins.map((admin) => {
+                      const isYou = admin.id === currentAdmin.id;
+                      return (
+                        <TableRow key={admin.id} className="hover:bg-muted/40 transition-colors">
+                          <TableCell>
+                            <div className="flex items-center gap-3 min-w-0">
+                              <InitialsAvatar name={admin.name} seed={admin.email} className="h-9 w-9 text-xs" />
+                              <div className="min-w-0">
+                                <div className="font-medium truncate">{admin.name}</div>
+                                <div className="text-xs text-muted-foreground truncate">{admin.email}</div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {isYou ? (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 whitespace-nowrap">
+                                <Shield className="h-3 w-3" /> Aktif (Anda)
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 whitespace-nowrap">
+                                <Shield className="h-3 w-3" /> Admin
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                            {format(new Date(admin.created_at), "d MMM yyyy", { locale: localeId })}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8 rounded-full border-primary/20 bg-primary/10 text-primary hover:border-primary hover:bg-primary hover:text-white"
+                                    title="Aksi admin"
+                                    aria-label="Aksi admin"
+                                  >
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-52">
+                                  <DropdownMenuItem onClick={() => openEditDialog(admin)}>
+                                    <Edit className="h-4 w-4 mr-2" /> Edit Data
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => openPasswordDialog(admin)}>
+                                    <KeyRound className="h-4 w-4 mr-2" /> Reset Password
+                                  </DropdownMenuItem>
+                                  {!isYou && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => openDeleteDialog(admin)}>
+                                        <Trash2 className="h-4 w-4 mr-2" /> Hapus Admin
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

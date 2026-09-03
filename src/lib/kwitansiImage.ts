@@ -6,11 +6,10 @@
 interface KwitansiImageData {
   namaPenyewa: string;
   kamar: string;
-  bulanSewa: string;
+  periodeSewa: string;
   nominal: string;
   tanggalBayar: string;
   metodePembayaran: string;
-  tanggalMasuk: string;
   logoBase64?: string;
 }
 
@@ -137,8 +136,7 @@ export function generateKwitansiImage(data: KwitansiImageData): Promise<Blob> {
     // Fields
     drawBoldField(ctx, "Nama Penyewa", data.namaPenyewa, padX, padR, y); y += 40;
     drawBoldField(ctx, "Kamar", data.kamar, padX, padR, y); y += 40;
-    drawBoldField(ctx, "Bulan Sewa", data.bulanSewa, padX, padR, y); y += 40;
-    drawBoldField(ctx, "Tanggal Masuk", data.tanggalMasuk, padX, padR, y); y += 10;
+    drawBoldField(ctx, "Periode Sewa", data.periodeSewa, padX, padR, y); y += 40;
 
     // ── Divider ──
     y += 10;

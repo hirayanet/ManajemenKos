@@ -18,6 +18,7 @@ import ResidentHistory from "./pages/ResidentHistory";
 import DPReservasi from "./pages/DPReservasi";
 import AdminManagement from "./pages/AdminManagement";
 import KwitansiView from "./pages/KwitansiView";
+import InstallApp from "./pages/InstallApp";
 
 const queryClient = new QueryClient();
 
@@ -84,6 +85,13 @@ const App = () => (
             <AuthGuard>
               <Layout>
                 <AdminManagement />
+              </Layout>
+            </AuthGuard>
+          } />
+          <Route path="/install" element={
+            <AuthGuard>
+              <Layout>
+                <InstallApp />
               </Layout>
             </AuthGuard>
           } />

@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { PlusCircle, Edit, Trash2, Download, Receipt } from "lucide-react";
+import { PlusCircle, Edit, Trash2, Download, Receipt, ReceiptText, Home, CalendarDays, Wallet, Pencil } from "lucide-react";
+import { id as localeId } from "date-fns/locale";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { WhatsappIcon } from '@/components/ui/WhatsappIcon';
@@ -17,11 +18,14 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
-  DropdownMenuItem
+  DropdownMenuItem,
+  DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
 import { uploadPDFtoSupabase } from '../lib/supabaseUpload';
 import { jsPDFToBlob } from '../lib/pdfUtils';
+import { formatPeriodeSewa } from '../lib/periodeSewa';
 import { format } from "date-fns";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import jsPDF from "jspdf";
 import logoImg from '../assets/hr_logo_base64'; // (Pastikan file ini ada dan berisi string base64 logo Anda)
 import { generateKwitansiPDF } from '../lib/kwitansiPDF';
@@ -37,6 +41,10 @@ const ROOM_PRICES: Record<number, number> = {
 
 const getRoomPrice = (roomNumber: number): number => ROOM_PRICES[roomNumber] ?? 0;
 
+// Format tanggal Date -> "YYYY-MM-DD" (lokal)
+const toISODate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 interface Resident {
   id: string;
   full_name: string;
@@ -49,6 +57,8 @@ interface Payment {
   resident_id: string;
   payment_date: string;
   payment_month: string;
+  periode_mulai?: string | null;
+  periode_selesai?: string | null;
   amount: number;
   payment_method: string;
   receipt_url?: string;
@@ -79,6 +89,7 @@ export default function Payments() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [kwitansiSheetPayment, setKwitansiSheetPayment] = useState<Payment | null>(null);
+  const [deletePayment, setDeletePayment] = useState<Payment | null>(null); // konfirmasi hapus (tabel desktop)
 
   const months = [
     "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -101,6 +112,7 @@ export default function Payments() {
   const [paymentType, setPaymentType] = useState<"bulanan" | "harian">("bulanan");
   const [dailyRate, setDailyRate] = useState("");
   const [numDays, setNumDays] = useState("");
+  const [dailyStart, setDailyStart] = useState(""); // Tanggal mulai sewa (khusus harian)
 
   const paymentMethods = [
     "Tunai",
@@ -133,17 +145,32 @@ export default function Payments() {
           )
         `);
 
-      if (filterMonth !== "Semua") {
-        query = query.eq("payment_month", filterMonth);
+      // Filter berdasarkan bulan & tahun PERIODE sewa (akurat lintas bulan/tahun):
+      // - Bulanan : payment_month = nama bulan & payment_date pada tahun terpilih (perilaku lama).
+      // - Harian  : periode_mulai jatuh pada bulan/tahun terpilih.
+      // - Fallback: data harian lama yang belum dimigrasi (periode_mulai kosong) tetap
+      //   dicocokkan lewat teks "Harian: ..." + payment_date pada tahun terpilih.
+      const yearStart = `${filterYear}-01-01`;
+      const yearEnd = `${filterYear}-12-31`;
+      const monthIdx = months.indexOf(filterMonth);
+      if (filterMonth !== "Semua" && monthIdx >= 0) {
+        const monthNum = String(monthIdx + 1).padStart(2, "0");
+        const monthStart = `${filterYear}-${monthNum}-01`;
+        const lastDay = new Date(parseInt(filterYear), monthIdx + 1, 0).getDate();
+        const monthEnd = `${filterYear}-${monthNum}-${String(lastDay).padStart(2, "0")}`;
+        query = query.or(
+          `and(payment_month.eq.${filterMonth},payment_date.gte.${yearStart},payment_date.lte.${yearEnd}),` +
+          `and(periode_mulai.gte.${monthStart},periode_mulai.lte.${monthEnd}),` +
+          `and(periode_mulai.is.null,payment_month.like.Harian:*${filterMonth}*,payment_date.gte.${yearStart},payment_date.lte.${yearEnd})`
+        );
+      } else {
+        query = query.or(
+          `and(payment_date.gte.${yearStart},payment_date.lte.${yearEnd}),` +
+          `and(periode_mulai.gte.${yearStart},periode_mulai.lte.${yearEnd})`
+        );
       }
 
-      // Filter by the selected year based on payment_date
-      const startOfYear = `${filterYear}-01-01`;
-      const endOfYear = `${filterYear}-12-31`;
-
       const { data, error } = await query
-        .gte("payment_date", startOfYear)
-        .lte("payment_date", endOfYear)
         .order("created_at", { ascending: false })
         .range(targetPage * pageSize, targetPage * pageSize + pageSize - 1);
 
@@ -235,15 +262,21 @@ export default function Payments() {
   // Generate and download image kwitansi
   const generateReceiptImage = async (payment: Payment) => {
     try {
+      const periodeSewa = formatPeriodeSewa({
+        payment_month: payment.payment_month,
+        payment_date: payment.payment_date,
+        entry_date: payment.residents.entry_date,
+        periode_mulai: payment.periode_mulai ?? null,
+        periode_selesai: payment.periode_selesai ?? null,
+      });
       await downloadKwitansiImage(
         {
           namaPenyewa: payment.residents.full_name,
           kamar: payment.residents.rooms?.room_number?.toString() || '-',
-          bulanSewa: payment.payment_month,
+          periodeSewa,
           nominal: `Rp ${payment.amount.toLocaleString('id-ID')}`,
           tanggalBayar: format(new Date(payment.payment_date), 'dd MMMM yyyy'),
           metodePembayaran: payment.payment_method,
-          tanggalMasuk: format(new Date(payment.residents.entry_date), 'dd MMMM yyyy'),
         },
         `kwitansi-${payment.residents.full_name.replace(/\s+/g, '_')}-${payment.payment_date}.png`
       );
@@ -255,6 +288,13 @@ export default function Payments() {
 
   // Generate and download PDF
   const generateReceiptPDF = (payment: Payment) => {
+    const periodeSewa = formatPeriodeSewa({
+      payment_month: payment.payment_month,
+      payment_date: payment.payment_date,
+      entry_date: payment.residents.entry_date,
+      periode_mulai: payment.periode_mulai ?? null,
+      periode_selesai: payment.periode_selesai ?? null,
+    });
     const { doc } = generateKwitansiPDF({
       namaPenyewa: payment.residents.full_name,
       tanggalMasuk: payment.residents.entry_date, // gunakan entry_date sebagai tanggal masuk penghuni
@@ -264,6 +304,7 @@ export default function Payments() {
       kamar: payment.residents.rooms?.room_number ? payment.residents.rooms.room_number.toString() : '',
       metodePembayaran: payment.payment_method,
       bulanSewa: payment.payment_month,
+      periodeSewa,
     });
     doc.save(`kwitansi-${payment.residents.full_name}-${payment.payment_date}.pdf`);
   };
@@ -282,28 +323,15 @@ export default function Payments() {
       const baseUrl = window.location.origin;
       const viewerUrl = `${baseUrl}/kwitansi/${payment.id}`;
 
-      // Calculate period — daily uses stored text, monthly calculates date range
-      let periodeSewa = payment.payment_month;
-      const isDaily = payment.payment_month.startsWith("Harian");
-      if (!isDaily) {
-        const monthsMap: Record<string, number> = {
-          "Januari": 0, "Februari": 1, "Maret": 2, "April": 3, "Mei": 4, "Juni": 5,
-          "Juli": 6, "Agustus": 7, "September": 8, "Oktober": 9, "November": 10, "Desember": 11
-        };
-        try {
-          const entryParts = payment.residents.entry_date.split('-').map(Number);
-          const entryDay = entryParts[2];
-          const rentMonth = monthsMap[payment.payment_month] ?? new Date().getMonth();
-          let rentYear = new Date().getFullYear();
-          const now = new Date();
-          if (now.getMonth() === 11 && rentMonth === 0) rentYear += 1;
-          else if (now.getMonth() === 0 && rentMonth === 11) rentYear -= 1;
-          const startDate = new Date(rentYear, rentMonth, entryDay);
-          const endDate = new Date(rentYear, rentMonth + 1, entryDay);
-          const fmt = (d: Date) => `${d.getDate()} ${d.toLocaleString('id-ID', { month: 'long' })} ${d.getFullYear()}`;
-          periodeSewa = `${fmt(startDate)} - ${fmt(endDate)}`;
-        } catch {}
-      }
+      // Periode sewa: harian = tanggal mulai s/d akhir sewa (dari kolom periode),
+      // bulanan = rentang tanggal mengikuti tanggal masuk penghuni di bulan yang dibayar.
+      const periodeSewa = formatPeriodeSewa({
+        payment_month: payment.payment_month,
+        payment_date: payment.payment_date,
+        entry_date: payment.residents.entry_date,
+        periode_mulai: payment.periode_mulai ?? null,
+        periode_selesai: payment.periode_selesai ?? null,
+      });
 
       setShareUrl(viewerUrl);
       await supabase.from('payments').update({ receipt_url: viewerUrl }).eq('id', payment.id);
@@ -323,14 +351,24 @@ export default function Payments() {
     setIsLoading(true);
 
     try {
-      // For daily payments, encode period as "Harian: 1 Agustus - 3 Agustus 2026"
+      // Pembayaran harian: periode sewa disimpan sebagai kolom tanggal terstruktur
+      // (periode_mulai & periode_selesai) + teks "Harian: ..." untuk tampilan kwitansi.
+      // Tanggal mulai sewa (dailyStart) bisa berbeda dari tanggal bayar (payment_date).
       let effectivePaymentMonth = formData.payment_month;
-      if (paymentType === "harian" && numDays && formData.payment_date) {
-        const startParts = formData.payment_date.split('-').map(Number);
+      let periodeMulai: string | null = null;
+      let periodeSelesai: string | null = null;
+      if (paymentType === "harian" && numDays) {
+        const startDateText = dailyStart || formData.payment_date;
+        const startParts = startDateText.split('-').map(Number);
         const startDate = new Date(startParts[0], startParts[1] - 1, startParts[2]);
         const endDate = new Date(startParts[0], startParts[1] - 1, startParts[2] + parseInt(numDays) - 1);
         const fmt = (d: Date) => `${d.getDate()} ${d.toLocaleString('id-ID', { month: 'long' })} ${d.getFullYear()}`;
         effectivePaymentMonth = `Harian: ${fmt(startDate)} - ${fmt(endDate)}`;
+        periodeMulai = toISODate(startDate);
+        periodeSelesai = toISODate(endDate);
+      } else if (!months.includes(formData.payment_month)) {
+        // Hindari menyimpan teks "Harian: ..." saat jenis diubah ke bulanan saat edit
+        effectivePaymentMonth = months[new Date().getMonth()];
       }
 
       const paymentData = {
@@ -339,6 +377,8 @@ export default function Payments() {
         payment_month: effectivePaymentMonth,
         amount: parseFloat(formData.amount),
         payment_method: formData.payment_method,
+        periode_mulai: periodeMulai,
+        periode_selesai: periodeSelesai,
       };
 
       if (selectedPayment) {
@@ -416,6 +456,7 @@ export default function Payments() {
     });
     setSelectedPayment(null);
     setPaymentType("bulanan");
+    setDailyStart("");
     setDailyRate("");
     setNumDays("");
   };
@@ -433,10 +474,24 @@ export default function Payments() {
     const isDaily = payment.payment_month.startsWith("Harian");
     setPaymentType(isDaily ? "harian" : "bulanan");
     if (isDaily) {
-      // Try to extract rate and days from stored amount (rate not stored, show amount as reference)
-      setDailyRate("");
-      setNumDays("");
+      // Isi ulang tanggal mulai, jumlah hari & tarif dari kolom periode terstruktur
+      const mulai = payment.periode_mulai;
+      const selesai = payment.periode_selesai;
+      if (mulai && selesai) {
+        const startMs = new Date(mulai + "T00:00:00").getTime();
+        const endMs = new Date(selesai + "T00:00:00").getTime();
+        const days = Math.round((endMs - startMs) / 86400000) + 1;
+        setDailyStart(mulai);
+        setNumDays(days > 0 ? String(days) : "");
+        setDailyRate(days > 0 && payment.amount ? String(Math.round(payment.amount / days)) : "");
+      } else {
+        // Data lama tanpa kolom periode: mulai dianggap tanggal bayar, hari diisi ulang
+        setDailyStart(payment.payment_date);
+        setNumDays("");
+        setDailyRate("");
+      }
     } else {
+      setDailyStart("");
       setDailyRate("");
       setNumDays("");
     }
@@ -455,6 +510,37 @@ export default function Payments() {
       .slice()
       .sort((a, b) => (a.residents.rooms.room_number || 0) - (b.residents.rooms.room_number || 0))
   , [payments]);
+
+  // Ringkasan periode harian untuk pratinjau di form
+  const dailyPeriodText = (() => {
+    if (paymentType !== "harian" || !dailyStart || !numDays) return "";
+    const parts = dailyStart.split("-").map(Number);
+    const start = new Date(parts[0], parts[1] - 1, parts[2]);
+    const end = new Date(parts[0], parts[1] - 1, parts[2] + parseInt(numDays) - 1);
+    const fmt = (d: Date) => `${d.getDate()} ${d.toLocaleString("id-ID", { month: "long" })} ${d.getFullYear()}`;
+    return `${fmt(start)} - ${fmt(end)}`;
+  })();
+
+  // Periode harian versi ringkas utk daftar:
+  // "3 - 4 September 2026" / "30 September - 1 Oktober 2026" / lintas tahun tetap lengkap
+  const fmtDailyPeriod = (payment: Payment) => {
+    const mulai = payment.periode_mulai ? new Date(payment.periode_mulai + "T00:00:00") : null;
+    const selesai = payment.periode_selesai ? new Date(payment.periode_selesai + "T00:00:00") : null;
+    const namaBulan = (d: Date) => months[d.getMonth()];
+    if (mulai && selesai && mulai.getTime() <= selesai.getTime()) {
+      const sy = mulai.getFullYear();
+      const sm = mulai.getMonth();
+      if (selesai.getFullYear() === sy && selesai.getMonth() === sm) {
+        return `${mulai.getDate()} - ${selesai.getDate()} ${namaBulan(mulai)} ${sy}`;
+      }
+      if (selesai.getFullYear() === sy) {
+        return `${mulai.getDate()} ${namaBulan(mulai)} - ${selesai.getDate()} ${namaBulan(selesai)} ${sy}`;
+      }
+      return `${mulai.getDate()} ${namaBulan(mulai)} ${sy} - ${selesai.getDate()} ${namaBulan(selesai)} ${selesai.getFullYear()}`;
+    }
+    // Data lama tanpa kolom periode: buang awalan "Harian: "
+    return (payment.payment_month || "").replace(/^Harian:\s*/i, "") || "-";
+  };
 
   return (
     <div className="space-y-6">
@@ -525,7 +611,7 @@ export default function Payments() {
                     type="button"
                     variant={paymentType === "bulanan" ? "default" : "outline"}
                     className="flex-1"
-                    onClick={() => { setPaymentType("bulanan"); setDailyRate(""); setNumDays(""); }}
+                    onClick={() => { setPaymentType("bulanan"); setDailyStart(""); setDailyRate(""); setNumDays(""); }}
                   >
                     Bulanan
                   </Button>
@@ -533,7 +619,7 @@ export default function Payments() {
                     type="button"
                     variant={paymentType === "harian" ? "default" : "outline"}
                     className="flex-1"
-                    onClick={() => { setPaymentType("harian"); setFormData({ ...formData, amount: "" }); }}
+                    onClick={() => { setPaymentType("harian"); setFormData({ ...formData, amount: "" }); if (!dailyStart) setDailyStart(formData.payment_date); }}
                   >
                     Harian
                   </Button>
@@ -585,6 +671,7 @@ export default function Payments() {
 
               {/* Daily fields — show when paymentType === harian */}
               {paymentType === "harian" && (
+                <>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="daily_rate">Tarif/Hari (Rp)</Label>
@@ -620,6 +707,17 @@ export default function Payments() {
                     />
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="daily_start">Tanggal Mulai Sewa</Label>
+                  <Input
+                    id="daily_start"
+                    type="date"
+                    value={dailyStart}
+                    onChange={(e) => setDailyStart(e.target.value)}
+                    required
+                  />
+                </div>
+                </>
               )}
 
               <div className="grid grid-cols-2 gap-4">
@@ -633,24 +731,33 @@ export default function Payments() {
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="payment_month">Bulan Sewa</Label>
-                  <Select
-                    value={formData.payment_month}
-                    onValueChange={(value) => setFormData({ ...formData, payment_month: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih bulan" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {months.map((month) => (
-                        <SelectItem key={month} value={month}>
-                          {month}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {paymentType === "harian" ? (
+                  <div className="space-y-2">
+                    <Label>Periode Sewa</Label>
+                    <div className="min-h-[38px] flex items-center px-3 text-sm rounded-md border bg-muted text-muted-foreground">
+                      {dailyPeriodText || "Isi tanggal mulai & jumlah hari"}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="payment_month">Bulan Sewa</Label>
+                    <Select
+                      value={formData.payment_month}
+                      onValueChange={(value) => setFormData({ ...formData, payment_month: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih bulan" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {months.map((month) => (
+                          <SelectItem key={month} value={month}>
+                            {month}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -733,44 +840,57 @@ export default function Payments() {
             {payments
               .slice()
               .sort((a, b) => (a.residents.rooms.room_number || 0) - (b.residents.rooms.room_number || 0))
-              .map((payment) => (
-                <div key={payment.id} className="rounded-lg border p-4 bg-card text-card-foreground">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
+              .map((payment) => {
+                const roomNum = payment.residents?.rooms?.room_number;
+                const isDaily = (payment.payment_month || "").startsWith("Harian");
+                return (
+                <div key={payment.id} className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-3 p-4">
+                    <InitialsAvatar name={payment.residents?.full_name || "-"} seed={roomNum} className="h-10 w-10 text-sm" />
+                    <div className="min-w-0 flex-1">
                       <div className="font-semibold truncate">{payment.residents?.full_name || '-'}</div>
-                      <div className="text-sm text-muted-foreground">Kamar {payment.residents?.rooms?.room_number || '-'}</div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Home className="h-3 w-3" /> Kamar {roomNum || '-'}
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-semibold">Rp {payment.amount.toLocaleString('id-ID')}</div>
-                      <div className="text-xs text-muted-foreground">{format(new Date(payment.payment_date), 'dd/MM/yyyy')}</div>
-                    </div>
-                  </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <div className="text-muted-foreground">Bulan</div>
-                      <div className="font-medium">{payment.payment_month}</div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground">Metode</div>
-                      <div className="font-medium">{payment.payment_method}</div>
+                    <div className="text-right shrink-0">
+                      <div className="font-bold text-emerald-700">Rp {payment.amount.toLocaleString('id-ID')}</div>
+                      <div className="text-[11px] text-muted-foreground flex items-center justify-end gap-1">
+                        <CalendarDays className="h-3 w-3" />
+                        {format(new Date(payment.payment_date + "T00:00:00"), "d MMM yyyy", { locale: localeId })}
+                      </div>
                     </div>
                   </div>
-                  <div className="mt-3 flex items-center gap-2">
+                  <div className="px-4 pb-3 flex flex-wrap items-center gap-1.5">
+                    {isDaily ? (
+                      <span className="inline-flex text-[11px] font-semibold bg-violet-100 text-violet-700 border border-violet-200 rounded-full px-2.5 py-1">
+                        {fmtDailyPeriod(payment)}
+                      </span>
+                    ) : (
+                      <span className="inline-flex text-[11px] font-semibold bg-sky-100 text-sky-700 border border-sky-200 rounded-full px-2.5 py-1">
+                        {payment.payment_month}
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                      <Wallet className="h-3.5 w-3.5" /> {payment.payment_method}
+                    </span>
+                  </div>
+                  <div className="border-t bg-muted/40 p-2 flex items-center gap-2">
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
-                      className="flex-1"
+                      className="flex-1 justify-center"
                       title="Aksi Kwitansi"
                       onClick={() => setKwitansiSheetPayment(payment)}
                     >
-                      <Receipt className="h-4 w-4 mr-1" /> Kwitansi
+                      <ReceiptText className="h-4 w-4 mr-1" /> Kwitansi
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => openEditDialog(payment)}>
+                    <Button variant="ghost" size="sm" title="Edit" onClick={() => openEditDialog(payment)}>
                       <Edit className="h-4 w-4" />
                     </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="outline" size="sm">
+                        <Button variant="ghost" size="sm" title="Hapus">
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </AlertDialogTrigger>
@@ -792,7 +912,8 @@ export default function Payments() {
                     </AlertDialog>
                   </div>
                 </div>
-              ))}
+                );
+              })}
           </div>
           {!loadingPayments && hasMore && (
             <div className="block md:hidden mt-4">
@@ -809,87 +930,103 @@ export default function Payments() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
           ) : (
-          <Table className="min-w-[760px]">
+          <Table className="min-w-[880px]">
             <TableHeader>
-              <TableRow>
-                <TableHead>Penghuni</TableHead>
-                <TableHead>Kamar</TableHead>
-                <TableHead>Bulan</TableHead>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-[240px]">Penghuni</TableHead>
+                <TableHead>Periode</TableHead>
                 <TableHead>Tanggal Bayar</TableHead>
-                <TableHead>Jumlah</TableHead>
+                <TableHead className="text-right">Jumlah</TableHead>
                 <TableHead>Metode</TableHead>
-                <TableHead>Aksi</TableHead>
+                <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {payments
                 .slice()
                 .sort((a, b) => (a.residents.rooms.room_number || 0) - (b.residents.rooms.room_number || 0))
-                .map((payment) => (
-                  <TableRow key={payment.id}>
-                    <TableCell className="font-medium">{payment.residents?.full_name || "-"}</TableCell>
-                    <TableCell>Kamar {payment.residents?.rooms?.room_number || "-"}</TableCell>
-                    <TableCell>{payment.payment_month}</TableCell>
-                    <TableCell>{format(new Date(payment.payment_date), "dd/MM/yyyy")}</TableCell>
-                    <TableCell>Rp {payment.amount.toLocaleString("id-ID")}</TableCell>
-                    <TableCell>{payment.payment_method}</TableCell>
+                .map((payment) => {
+                  const roomNum = payment.residents?.rooms?.room_number;
+                  const isDaily = (payment.payment_month || "").startsWith("Harian");
+                  return (
+                  <TableRow key={payment.id} className="hover:bg-muted/40 transition-colors">
                     <TableCell>
-                      <div className="flex space-x-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <InitialsAvatar name={payment.residents?.full_name || "-"} seed={roomNum} className="h-9 w-9 text-xs" />
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{payment.residents?.full_name || "-"}</div>
+                          <div className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Home className="h-3 w-3" /> Kamar {roomNum || "-"}
+                          </div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {isDaily ? (
+                        <span className="inline-flex text-[11px] font-semibold bg-violet-100 text-violet-700 border border-violet-200 rounded-full px-2.5 py-1 whitespace-nowrap">
+                          {fmtDailyPeriod(payment)}
+                        </span>
+                      ) : (
+                        <span className="inline-flex text-xs font-semibold bg-sky-100 text-sky-700 border border-sky-200 rounded-full px-2.5 py-1">
+                          {payment.payment_month}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                      {format(new Date(payment.payment_date + "T00:00:00"), "d MMM yyyy", { locale: localeId })}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold whitespace-nowrap">Rp {payment.amount.toLocaleString("id-ID")}</TableCell>
+                    <TableCell className="text-sm">{payment.payment_method}</TableCell>
+                    <TableCell>
+                      <div className="flex justify-end">
                         <DropdownMenu>
-  <DropdownMenuTrigger asChild>
-    <Button variant="outline" size="sm" title="Aksi Kwitansi">
-      <Receipt className="h-4 w-4 mr-1" /> Kwitansi
-    </Button>
-  </DropdownMenuTrigger>
-  <DropdownMenuContent align="end">
-    <DropdownMenuItem onClick={() => generateReceiptImage(payment)}>
-      <Download className="h-4 w-4 mr-2" /> Download Kwitansi (Gambar)
-    </DropdownMenuItem>
-    <DropdownMenuItem onClick={() => generateReceiptPDF(payment)}>
-      <Receipt className="h-4 w-4 mr-2" /> Download Kwitansi (PDF)
-    </DropdownMenuItem>
-    <DropdownMenuItem
-      onClick={() => handleShareKwitansi(payment)}
-      disabled={uploadingId === payment.id}
-    >
-      <span className="mr-2">🔗</span>
-      {uploadingId === payment.id ? (
-        <span className="flex items-center"><span className="animate-spin mr-2 h-4 w-4 border-2 border-blue-400 border-t-transparent rounded-full"></span> Uploading...</span>
-      ) : (
-        <>Share Link Kwitansi</>
-      )}
-    </DropdownMenuItem>
-  </DropdownMenuContent>
-</DropdownMenu>
-                        <Button variant="outline" size="sm" onClick={() => openEditDialog(payment)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="outline" size="sm">
-                              <Trash2 className="h-4 w-4" />
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8 rounded-full border-primary/20 bg-primary/10 text-primary hover:border-primary hover:bg-primary hover:text-white"
+                              title="Aksi: kwitansi, edit, hapus"
+                              aria-label="Aksi pembayaran"
+                            >
+                              <ReceiptText className="h-4 w-4" />
                             </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Hapus Pembayaran</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Apakah Anda yakin ingin menghapus pembayaran ini? 
-                                Tindakan ini tidak dapat dibatalkan.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Batal</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDelete(payment.id)}>
-                                Hapus
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuItem onClick={() => generateReceiptImage(payment)}>
+                              <Download className="h-4 w-4 mr-2" /> Unduh Kwitansi (Gambar)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => generateReceiptPDF(payment)}>
+                              <Receipt className="h-4 w-4 mr-2" /> Unduh Kwitansi (PDF)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleShareKwitansi(payment)}
+                              disabled={uploadingId === payment.id}
+                            >
+                              <span className="mr-2">🔗</span>
+                              {uploadingId === payment.id ? (
+                                <span className="flex items-center"><span className="animate-spin mr-2 h-4 w-4 border-2 border-blue-400 border-t-transparent rounded-full"></span> Uploading...</span>
+                              ) : (
+                                <>Bagikan Link Kwitansi</>
+                              )}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => openEditDialog(payment)}>
+                              <Pencil className="h-4 w-4 mr-2" /> Edit Pembayaran
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setDeletePayment(payment)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" /> Hapus Pembayaran
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
             </TableBody>
           </Table>
           )}
@@ -903,6 +1040,27 @@ export default function Payments() {
           )}
         </CardContent>
       </Card>
+      {/* Konfirmasi hapus (dipicu dari menu aksi tabel desktop) */}
+      <AlertDialog open={!!deletePayment} onOpenChange={(o) => { if (!o) setDeletePayment(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Pembayaran</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menghapus pembayaran{deletePayment?.residents?.full_name ? ` dari ${deletePayment.residents.full_name}` : " ini"}?
+              Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (deletePayment) handleDelete(deletePayment.id); setDeletePayment(null); }}
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {/* Mobile Kwitansi Action Sheet */}
       <Sheet open={!!kwitansiSheetPayment} onOpenChange={(o) => { if (!o) setKwitansiSheetPayment(null); }}>
         <SheetContent side="bottom" className="p-4">

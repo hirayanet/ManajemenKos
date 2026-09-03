@@ -5,7 +5,14 @@ import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Textarea } from "../components/ui/textarea";
 import { format, parseISO } from "date-fns";
-import { Download } from "lucide-react";
+import { id as localeId } from "date-fns/locale";
+import { Download, CalendarDays, Edit, Trash2, MoreVertical } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
+import { Label } from "../components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
+import { useToast } from "../hooks/use-toast";
 import jsPDF from "jspdf";
 
 interface Expense {
@@ -24,6 +31,17 @@ const CATEGORIES = [
   "Service",
   "Lain-lain"
 ];
+
+// Warna chip per kategori — konsisten antara kartu mobile & tabel desktop
+const CATEGORY_CHIP: Record<string, string> = {
+  "Uang Sampah": "bg-slate-100 text-slate-700 border-slate-200",
+  "Gaji Ema Tati": "bg-sky-100 text-sky-700 border-sky-200",
+  "Belanja": "bg-amber-100 text-amber-700 border-amber-200",
+  "Service": "bg-violet-100 text-violet-700 border-violet-200",
+  "Lain-lain": "bg-rose-100 text-rose-700 border-rose-200",
+};
+const chipFor = (category: string) =>
+  CATEGORY_CHIP[category] || "bg-gray-100 text-gray-700 border-gray-200";
 
 const years = Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - i).toString());
 const months = [
@@ -45,6 +63,10 @@ export default function Expenses() {
   const [reportPeriod, setReportPeriod] = useState<"year" | "month">("year");
   const [yearlyExpenses, setYearlyExpenses] = useState<Expense[]>([]);
   const [monthlyExpenses, setMonthlyExpenses] = useState<Expense[]>([]);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [editForm, setEditForm] = useState({ category: "", amount: "", expenseDate: "", description: "" });
+  const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchExpenses();
@@ -124,6 +146,64 @@ export default function Expenses() {
       fetchExpenses();
     }
     setLoading(false);
+  }
+
+  const refreshLists = () => {
+    fetchExpenses();
+    if (reportPeriod === "year") {
+      fetchYearlyExpenses();
+    } else {
+      fetchMonthlyExpenses();
+    }
+  };
+
+  const openEditDialog = (exp: Expense) => {
+    setEditingExpense(exp);
+    setEditForm({
+      category: exp.category,
+      amount: String(exp.amount),
+      expenseDate: exp.expense_date.slice(0, 10),
+      description: exp.description || "",
+    });
+  };
+
+  async function handleUpdateExpense() {
+    if (!editingExpense) return;
+    if (!editForm.category || !editForm.amount || !editForm.expenseDate) {
+      toast({ title: "Form tidak lengkap", description: "Kategori, jumlah, dan tanggal wajib diisi", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase
+      .from("expenses")
+      .update({
+        category: editForm.category,
+        amount: parseFloat(editForm.amount),
+        expense_date: editForm.expenseDate,
+        description: editForm.description,
+      })
+      .eq("id", editingExpense.id);
+    if (error) {
+      toast({ title: "Gagal menyimpan perubahan", description: "Terjadi kesalahan saat mengupdate pengeluaran", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Berhasil", description: "Pengeluaran berhasil diperbarui" });
+    setEditingExpense(null);
+    refreshLists();
+  }
+
+  async function handleDeleteExpense() {
+    if (!deleteTarget) return;
+    const { error } = await supabase
+      .from("expenses")
+      .delete()
+      .eq("id", deleteTarget.id);
+    if (error) {
+      toast({ title: "Gagal menghapus", description: "Terjadi kesalahan saat menghapus pengeluaran", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Berhasil", description: "Pengeluaran berhasil dihapus" });
+    setDeleteTarget(null);
+    refreshLists();
   }
 
   async function fetchYearlyExpenses() {
@@ -415,17 +495,33 @@ export default function Expenses() {
       {/* Mobile list (cards) */}
       <div className="block md:hidden space-y-3">
         {expenses.map((exp) => (
-          <div key={exp.id} className="rounded-lg border p-4 bg-card text-card-foreground">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="font-semibold">{exp.category}</div>
-                <div className="text-xs text-muted-foreground">{format(parseISO(exp.expense_date), "dd/MM/yyyy")}</div>
+          <div key={exp.id} className="rounded-xl border bg-card text-card-foreground shadow-sm p-4">
+            <div className="flex items-center gap-3">
+              <div className={`h-10 w-10 rounded-full border flex items-center justify-center font-bold text-sm shrink-0 ${chipFor(exp.category)}`}>
+                {(exp.category || "?").charAt(0)}
               </div>
-              <div className="font-semibold">Rp {exp.amount.toLocaleString('id-ID')}</div>
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold truncate">{exp.category}</div>
+                <div className="text-xs text-muted-foreground flex items-center gap-1">
+                  <CalendarDays className="h-3 w-3" />
+                  {format(parseISO(exp.expense_date), "d MMM yyyy", { locale: localeId })}
+                </div>
+              </div>
+              <div className="font-bold text-rose-600 shrink-0">Rp {exp.amount.toLocaleString('id-ID')}</div>
             </div>
-            {exp.description && (
-              <div className="mt-2 text-sm text-muted-foreground">{exp.description}</div>
-            )}
+            <div className="mt-3 border-t border-dashed pt-3 space-y-2">
+              {exp.description && (
+                <p className="text-sm text-muted-foreground">{exp.description}</p>
+              )}
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" className="flex-1 rounded-full" onClick={() => openEditDialog(exp)}>
+                  <Edit className="h-3.5 w-3.5 mr-1.5" /> Edit
+                </Button>
+                <Button variant="outline" size="sm" className="flex-1 rounded-full bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20 hover:text-destructive" onClick={() => setDeleteTarget(exp)}>
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Hapus
+                </Button>
+              </div>
+            </div>
           </div>
         ))}
         {expenses.length === 0 && (
@@ -435,30 +531,119 @@ export default function Expenses() {
 
       {/* Desktop/tablet table */}
       <div className="hidden md:block overflow-x-auto">
-        <table className="min-w-full border text-sm">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="border px-2 py-1">Tanggal</th>
-              <th className="border px-2 py-1">Kategori</th>
-              <th className="border px-2 py-1">Jumlah</th>
-              <th className="border px-2 py-1">Keterangan</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>            <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>Kategori</TableHead>
+              <TableHead>Tanggal</TableHead>
+              <TableHead className="text-right">Jumlah</TableHead>
+              <TableHead>Keterangan</TableHead>
+              <TableHead className="text-right">Aksi</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {expenses.map(exp => (
-              <tr key={exp.id}>
-                <td className="border px-2 py-1">{format(parseISO(exp.expense_date), "dd/MM/yyyy")}</td>
-                <td className="border px-2 py-1">{exp.category}</td>
-                <td className="border px-2 py-1">Rp {exp.amount.toLocaleString("id-ID")}</td>
-                <td className="border px-2 py-1">{exp.description || "-"}</td>
-              </tr>
+              <TableRow key={exp.id} className="hover:bg-muted/40 transition-colors">
+                <TableCell>
+                  <span className={`inline-flex text-xs font-semibold border rounded-full px-2.5 py-1 ${chipFor(exp.category)}`}>
+                    {exp.category}
+                  </span>
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                  {format(parseISO(exp.expense_date), "d MMM yyyy", { locale: localeId })}
+                </TableCell>
+                <TableCell className="text-right font-semibold text-rose-600 whitespace-nowrap">Rp {exp.amount.toLocaleString("id-ID")}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{exp.description || "-"}</TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="icon" className="h-8 w-8 rounded-full border-primary/20 bg-primary/10 text-primary hover:border-primary hover:bg-primary hover:text-white" title="Aksi pengeluaran" aria-label="Aksi pengeluaran">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem onClick={() => openEditDialog(exp)}>
+                          <Edit className="h-4 w-4 mr-2" /> Edit Data
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteTarget(exp)}>
+                          <Trash2 className="h-4 w-4 mr-2" /> Hapus Pengeluaran
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </TableCell>
+              </TableRow>
             ))}
             {expenses.length === 0 && (
-              <tr><td colSpan={4} className="text-center py-2">Belum ada data pengeluaran.</td></tr>
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">Belum ada data pengeluaran.</TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
+
+      {/* Dialog Edit Pengeluaran */}
+      <Dialog open={!!editingExpense} onOpenChange={(open) => { if (!open) setEditingExpense(null); }}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Pengeluaran</DialogTitle>
+            <DialogDescription>
+              Perbarui detail pengeluaran di bawah ini.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Kategori</Label>
+              <Select value={editForm.category} onValueChange={(v) => setEditForm({ ...editForm, category: v })}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Pilih kategori" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="edit-amount">Jumlah (Rp)</Label>
+                <Input id="edit-amount" type="number" min="0" step="0.01" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-date">Tanggal</Label>
+                <Input id="edit-date" type="date" value={editForm.expenseDate} onChange={(e) => setEditForm({ ...editForm, expenseDate: e.target.value })} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-desc">Keterangan</Label>
+              <Textarea id="edit-desc" rows={2} value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setEditingExpense(null)}>Batal</Button>
+              <Button onClick={handleUpdateExpense} disabled={loading}>Simpan Perubahan</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Konfirmasi Hapus */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Pengeluaran</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menghapus pengeluaran "{deleteTarget?.category}" sebesar Rp {deleteTarget ? deleteTarget.amount.toLocaleString("id-ID") : ""}? Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteExpense} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Hapus</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

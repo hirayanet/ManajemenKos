@@ -49,6 +49,8 @@ export type Database = {
           payment_date: string
           payment_method: string
           payment_month: string
+          periode_mulai: string | null
+          periode_selesai: string | null
           receipt_url: string | null
           resident_id: string
         }
@@ -59,6 +61,8 @@ export type Database = {
           payment_date: string
           payment_method: string
           payment_month: string
+          periode_mulai?: string | null
+          periode_selesai?: string | null
           receipt_url?: string | null
           resident_id: string
         }
@@ -69,6 +73,8 @@ export type Database = {
           payment_date?: string
           payment_method?: string
           payment_month?: string
+          periode_mulai?: string | null
+          periode_selesai?: string | null
           receipt_url?: string | null
           resident_id?: string
         }

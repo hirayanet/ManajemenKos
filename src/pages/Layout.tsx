@@ -1,6 +1,7 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import MobileNav from "@/components/MobileNav";
+import InstallAppButton from "@/components/InstallAppButton";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 interface LayoutProps {
@@ -13,11 +14,12 @@ const Layout = ({ children }: LayoutProps) => {
   if (isMobile) {
     return (
       <SidebarProvider>
-        <div className="min-h-screen flex flex-col bg-background">
+        <div className="min-h-screen w-full flex flex-col bg-background">
           {/* Mobile Header */}
           <header className="sticky top-0 z-40 h-14 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex items-center h-full px-4">
+            <div className="flex items-center justify-between h-full px-4 gap-2">
               <h1 className="font-bold text-base">KOSFLOW</h1>
+              <InstallAppButton />
             </div>
           </header>
 
@@ -40,10 +42,13 @@ const Layout = ({ children }: LayoutProps) => {
         <AppSidebar />
         <div className="flex-1 flex flex-col">
           <header className="h-16 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex items-center h-full px-4">
-              <SidebarTrigger className="mr-4" />
+            <div className="flex items-center h-full px-4 gap-2">
+              <SidebarTrigger className="mr-2" />
               <div className="flex items-center space-x-2">
                 <h1 className="font-semibold">KOSFLOW</h1>
+              </div>
+              <div className="ml-auto">
+                <InstallAppButton />
               </div>
             </div>
           </header>

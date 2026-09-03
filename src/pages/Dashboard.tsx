@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Home, CreditCard, TrendingUp, TrendingDown } from "lucide-react";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
@@ -61,11 +62,12 @@ const Dashboard = () => {
         ];
         const currentMonthName = months[currentMonth];
 
+        // Ambil pembayaran tahun berjalan: bulanan dicari lewat payment_date, harian
+        // lewat periode_mulai (periode sewa mulai tahun ini).
         const { data: payments } = await supabase
           .from("payments")
-          .select("amount, payment_date")
-          .eq("payment_month", currentMonthName)
-          .filter('payment_date', 'gte', `${currentYear}-01-01`);
+          .select("amount, payment_month, periode_mulai")
+          .or(`payment_date.gte.${currentYear}-01-01,periode_mulai.gte.${currentYear}-01-01`);
 
         // Get current month expenses
         const firstDay = new Date(currentYear, currentMonth, 1);
@@ -81,7 +83,16 @@ const Dashboard = () => {
         const totalRooms = rooms?.length || 0;
         const occupiedRooms = rooms?.filter(room => room.is_occupied).length || 0;
         const totalResidents = residents?.length || 0;
-        const monthlyPayments = payments?.reduce((sum, payment) => sum + Number(payment.amount), 0) || 0;
+        // Bulanan: payment_month = nama bulan berjalan. Harian: periode_mulai (kolom
+        // tanggal periode sewa) jatuh pada bulan & tahun berjalan — akurat lintas bulan/tahun.
+        const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
+        const isPaymentForCurrentMonth = (payment: { payment_month: string; periode_mulai: string | null }) => {
+          if (payment.periode_mulai) return payment.periode_mulai.startsWith(monthPrefix);
+          return payment.payment_month === currentMonthName;
+        };
+        const monthlyPayments = (payments || [])
+          .filter(isPaymentForCurrentMonth)
+          .reduce((sum, payment) => sum + Number(payment.amount), 0) || 0;
         const monthlyProfit = monthlyPayments - monthlyExpenses;
 
         setStats({
@@ -143,88 +154,74 @@ const Dashboard = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
-        <Card className="shadow-sm">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="p-1.5 rounded-md bg-primary/10">
-                <Home className="h-3.5 w-3.5 text-primary" />
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4">
+        {[
+          {
+            label: "Total Kamar",
+            value: String(stats.totalRooms),
+            sub: `${stats.occupiedRooms} terisi`,
+            icon: TrendingUp,
+            tint: "bg-primary/10 text-primary",
+          },
+          {
+            label: "Penghuni",
+            value: String(stats.totalResidents),
+            sub: stats.totalRooms ? `${Math.round((stats.occupiedRooms / stats.totalRooms) * 100)}% hunian` : "0% hunian",
+            icon: Users,
+            tint: "bg-blue-500/10 text-blue-500",
+          },
+          {
+            label: "Kamar Terisi",
+            value: String(stats.occupiedRooms),
+            sub: `dari ${stats.totalRooms} kamar`,
+            icon: Home,
+            tint: "bg-amber-500/10 text-amber-500",
+          },
+          {
+            label: "Pemasukan",
+            value: formatRupiah(stats.monthlyPayments),
+            sub: monthLabel,
+            icon: CreditCard,
+            tint: "bg-emerald-500/10 text-emerald-600",
+          },
+          {
+            label: "Pengeluaran",
+            value: formatRupiah(stats.monthlyExpenses),
+            sub: monthLabel,
+            icon: TrendingDown,
+            tint: "bg-red-500/10 text-red-500",
+          },
+        ].map(({ label, value, sub, icon: Icon, tint }) => (
+          <Card key={label} className="rounded-2xl shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground leading-tight">
+                  {label}
+                </p>
+                <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${tint}`}>
+                  <Icon className="h-4 w-4" />
+                </div>
               </div>
-              <span className="text-[11px] md:text-sm font-medium text-muted-foreground leading-tight">Total Kamar</span>
-            </div>
-            <div className="text-xl md:text-2xl font-bold mt-1">{stats.totalRooms}</div>
-            <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5">{stats.occupiedRooms} terisi</p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="p-1.5 rounded-md bg-blue-500/10">
-                <Users className="h-3.5 w-3.5 text-blue-500" />
+              <p className="text-xl md:text-2xl font-bold mt-2 truncate">{value}</p>
+              <p className="text-[11px] md:text-xs text-muted-foreground mt-1 truncate">{sub}</p>
+            </CardContent>
+          </Card>
+        ))}
+        {/* Laba/Rugi */}
+        <Card className="rounded-2xl shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground leading-tight">
+                Laba/Rugi
+              </p>
+              <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${stats.monthlyProfit >= 0 ? "bg-emerald-500/10 text-emerald-600" : "bg-red-500/10 text-red-500"}`}>
+                {stats.monthlyProfit >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
               </div>
-              <span className="text-[11px] md:text-sm font-medium text-muted-foreground leading-tight">Penghuni</span>
             </div>
-            <div className="text-xl md:text-2xl font-bold mt-1">{stats.totalResidents}</div>
-            <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5">
-              {stats.totalRooms ? ((stats.occupiedRooms / stats.totalRooms) * 100).toFixed(0) : 0}% hunian
+            <p className={`text-xl md:text-2xl font-bold mt-2 truncate ${stats.monthlyProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+              {formatRupiah(stats.monthlyProfit)}
             </p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="p-1.5 rounded-md bg-amber-500/10">
-                <TrendingUp className="h-3.5 w-3.5 text-amber-500" />
-              </div>
-              <span className="text-[11px] md:text-sm font-medium text-muted-foreground leading-tight">Terisi</span>
-            </div>
-            <div className="text-xl md:text-2xl font-bold mt-1">{stats.occupiedRooms}</div>
-            <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5">dari {stats.totalRooms}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="p-1.5 rounded-md bg-green-500/10">
-                <CreditCard className="h-3.5 w-3.5 text-green-500" />
-              </div>
-              <span className="text-[11px] md:text-sm font-medium text-muted-foreground leading-tight">Pemasukan</span>
-            </div>
-            <div className="text-lg md:text-2xl font-bold mt-1">{formatRupiah(stats.monthlyPayments)}</div>
-            <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5 truncate">{monthLabel}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="p-1.5 rounded-md bg-red-500/10">
-                <TrendingDown className="h-3.5 w-3.5 text-red-500" />
-              </div>
-              <span className="text-[11px] md:text-sm font-medium text-muted-foreground leading-tight">Pengeluaran</span>
-            </div>
-            <div className="text-lg md:text-2xl font-bold mt-1 text-red-600">{formatRupiah(stats.monthlyExpenses)}</div>
-            <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5 truncate">{monthLabel}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <div className={`p-1.5 rounded-md ${stats.monthlyProfit >= 0 ? "bg-emerald-500/10" : "bg-red-500/10"}`}>
-                {stats.monthlyProfit >= 0 ? (
-                  <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
-                ) : (
-                  <TrendingDown className="h-3.5 w-3.5 text-red-500" />
-                )}
-              </div>
-              <span className="text-[11px] md:text-sm font-medium text-muted-foreground leading-tight">Laba/Rugi</span>
-            </div>
-            <div className={`text-lg md:text-2xl font-bold mt-1 ${stats.monthlyProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatRupiah(stats.monthlyProfit)}</div>
-            <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5">Bulan ini</p>
+            <p className="text-[11px] md:text-xs text-muted-foreground mt-1 truncate">Bulan ini</p>
           </CardContent>
         </Card>
       </div>
@@ -244,11 +241,11 @@ const Dashboard = () => {
               {recentResidents.map((resident) => (
                 <div key={resident.id} className="flex items-center justify-between p-3 border rounded-xl">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <span className="text-sm font-bold text-primary">
-                        {resident.full_name?.charAt(0)?.toUpperCase()}
-                      </span>
-                    </div>
+                    <InitialsAvatar
+                      name={resident.full_name || "-"}
+                      seed={resident.rooms?.room_number}
+                      className="h-9 w-9 text-xs"
+                    />
                     <div className="min-w-0">
                       <p className="font-medium text-sm truncate">{resident.full_name}</p>
                       <p className="text-xs text-muted-foreground truncate">{resident.phone_number}</p>

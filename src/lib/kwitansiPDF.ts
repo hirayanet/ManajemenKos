@@ -18,7 +18,8 @@ export function generateKwitansiPDF({
   logoBase64,
   kamar,
   metodePembayaran,
-  bulanSewa
+  bulanSewa,
+  periodeSewa: periodeSewaOverride
 }: {
   namaPenyewa: string;
   tanggalMasuk: string; // format yyyy-mm-dd
@@ -28,6 +29,7 @@ export function generateKwitansiPDF({
   kamar: string;
   metodePembayaran: string;
   bulanSewa?: string;
+  periodeSewa?: string; // bila diisi (format "1 Agustus 2026 - 3 Agustus 2026"), dipakai langsung
 }): { doc: jsPDF, periodeSewa: string } {
   const doc = new jsPDF();
 
@@ -50,7 +52,7 @@ export function generateKwitansiPDF({
   // Hitung periode sewa otomatis
   // tanggalMasuk: tanggal masuk kos (yyyy-mm-dd)
   // tanggal: tanggal pembayaran (yyyy-mm-dd)
-  let periodeSewa = '';
+  let computedPeriodeSewa = '';
   try {
     // Parse tanggal secara manual untuk menghindari pergeseran timezone
     const parseYMD = (s: string) => {
@@ -94,10 +96,14 @@ export function generateKwitansiPDF({
 
     // Format tanggal: 5 Agustus 2025
     const formatTanggal = (tgl: Date) => tgl.getDate() + ' ' + tgl.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
-    periodeSewa = `${formatTanggal(mulai)} - ${formatTanggal(akhir)}`;
+    computedPeriodeSewa = `${formatTanggal(mulai)} - ${formatTanggal(akhir)}`;
   } catch (e) {
-    periodeSewa = '-';
+    computedPeriodeSewa = '';
   }
+
+  // Periode dari pemanggil (mis. struk mobile) lebih diutamakan agar preview dan
+  // hasil unduh konsisten; kalau tidak ada, pakai hasil hitung otomatis di atas.
+  const periodeSewa = periodeSewaOverride || computedPeriodeSewa || '-';
 
   // Data pembayaran
   autoTable(doc, {

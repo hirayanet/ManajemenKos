@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { generateKwitansiImage } from "@/lib/kwitansiImage";
 import { generateKwitansiPDF } from "@/lib/kwitansiPDF";
+import { formatPeriodeSewa } from "@/lib/periodeSewa";
 import { jsPDFToBlob } from "@/lib/pdfUtils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,6 +15,8 @@ interface PaymentData {
   amount: number;
   payment_date: string;
   payment_month: string;
+  periode_mulai: string | null;
+  periode_selesai: string | null;
   payment_method: string;
   residents: {
     full_name: string;
@@ -68,14 +71,20 @@ export default function KwitansiView() {
     if (!payment) return;
     setGenerating(true);
     try {
+      const periodeSewa = formatPeriodeSewa({
+        payment_month: payment.payment_month,
+        payment_date: payment.payment_date,
+        entry_date: payment.residents?.entry_date ?? null,
+        periode_mulai: payment.periode_mulai ?? null,
+        periode_selesai: payment.periode_selesai ?? null,
+      });
       const blob = await generateKwitansiImage({
         namaPenyewa: payment.residents?.full_name || "-",
         kamar: payment.residents?.rooms?.room_number?.toString() || "-",
-        bulanSewa: payment.payment_month,
+        periodeSewa,
         nominal: `Rp ${payment.amount.toLocaleString("id-ID")}`,
         tanggalBayar: format(new Date(payment.payment_date), "dd MMMM yyyy"),
         metodePembayaran: payment.payment_method,
-        tanggalMasuk: format(new Date(payment.residents?.entry_date || ""), "dd MMMM yyyy"),
       });
       setImageBlob(blob);
       setImageUrl(URL.createObjectURL(blob));
@@ -108,6 +117,13 @@ export default function KwitansiView() {
         kamar: payment.residents?.rooms?.room_number?.toString() || "",
         metodePembayaran: payment.payment_method,
         bulanSewa: payment.payment_month,
+        periodeSewa: formatPeriodeSewa({
+          payment_month: payment.payment_month,
+          payment_date: payment.payment_date,
+          entry_date: payment.residents?.entry_date ?? null,
+          periode_mulai: payment.periode_mulai ?? null,
+          periode_selesai: payment.periode_selesai ?? null,
+        }),
       });
       doc.save(`kwitansi-${payment.residents?.full_name?.replace(/\s+/g, "_")}-${payment.payment_date}.pdf`);
     } catch (err) {

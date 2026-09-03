@@ -1,16 +1,17 @@
 import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { format, differenceInMonths, differenceInDays } from "date-fns";
+import { id as localeId } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, UserPlus } from "lucide-react";
+import { Search, UserPlus, Home, CalendarDays } from "lucide-react";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 
 interface ResidentHistory {
   id: string;
@@ -304,23 +305,37 @@ export default function ResidentHistory() {
               {/* Mobile list (cards) */}
               <div className="block md:hidden space-y-3">
                 {displayedHistory.map((resident) => (
-                  <div key={resident.id} className="rounded-lg border p-4 bg-card text-card-foreground">
+                  <div key={resident.id} className="rounded-xl border border-muted p-3 bg-card text-card-foreground shadow-sm">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-semibold truncate">{resident.full_name}</div>
-                        <div className="text-sm text-muted-foreground">Kamar {resident.rooms.room_number}</div>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <InitialsAvatar name={resident.full_name} seed={resident.rooms?.room_number} className="h-10 w-10 text-sm" />
+                        <div className="min-w-0">
+                          <div className="truncate text-base font-semibold">{resident.full_name}</div>
+                          <div className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Home className="h-3 w-3" /> Kamar {resident.rooms.room_number}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-right text-sm">
-                        <div className="text-xs text-muted-foreground">Masuk: {format(new Date(resident.entry_date), 'dd/MM/yyyy')}</div>
-                        <div className="text-xs text-muted-foreground">Keluar: {format(new Date(resident.tanggal_keluar), 'dd/MM/yyyy')}</div>
+                      <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-600 border border-slate-200 px-2.5 py-1 text-[11px] font-semibold shrink-0">
+                        Sudah Keluar
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <div className="flex flex-col gap-0.5">
+                        <div className="text-[11px] text-muted-foreground leading-none">Masuk</div>
+                        <div className="text-sm font-medium leading-tight">{format(new Date(resident.entry_date), "d MMM yyyy", { locale: localeId })}</div>
+                      </div>
+                      <div className="flex flex-col gap-0.5 items-end">
+                        <div className="text-[11px] text-muted-foreground leading-none">Keluar</div>
+                        <div className="text-sm font-medium leading-tight">{format(new Date(resident.tanggal_keluar), "d MMM yyyy", { locale: localeId })}</div>
                       </div>
                     </div>
-                    <div className="mt-3 text-sm flex justify-between items-center pt-2 border-t">
-                      <div>
-                        Lama tinggal: <span className="font-medium">{calculateStayDuration(resident.entry_date, resident.tanggal_keluar)}</span>
+                    <div className="mt-3 flex items-center justify-between gap-2 border-t border-dashed pt-3">
+                      <div className="text-xs text-muted-foreground min-w-0">
+                        Lama tinggal: <span className="font-semibold text-foreground">{calculateStayDuration(resident.entry_date, resident.tanggal_keluar)}</span>
                       </div>
-                      <Button variant="outline" size="sm" onClick={() => handleOpenRentAgain(resident)} className="flex items-center gap-1">
-                        <UserPlus className="h-4 w-4" /> Kos Lagi
+                      <Button variant="outline" size="sm" onClick={() => handleOpenRentAgain(resident)} className="flex items-center gap-1.5 shrink-0 h-8 rounded-full border-primary/20 bg-primary/10 text-primary hover:bg-primary hover:text-white hover:border-primary">
+                        <UserPlus className="h-3.5 w-3.5" /> Kos Lagi
                       </Button>
                     </div>
                   </div>
@@ -329,30 +344,45 @@ export default function ResidentHistory() {
 
               {/* Desktop/tablet table */}
               <div className="hidden md:block overflow-x-auto">
-                <Table className="min-w-[720px]">
+                <Table className="min-w-[780px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Nama</TableHead>
-                      <TableHead>Kamar</TableHead>
+                      <TableHead className="w-[240px]">Penghuni</TableHead>
                       <TableHead>Tanggal Masuk</TableHead>
                       <TableHead>Tanggal Keluar</TableHead>
                       <TableHead>Lama Tinggal</TableHead>
-                      <TableHead className="w-32">Aksi</TableHead>
+                      <TableHead className="text-right">Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {displayedHistory.map((resident) => (
-                      <TableRow key={resident.id}>
-                        <TableCell className="font-medium">{resident.full_name}</TableCell>
-                        <TableCell>Kamar {resident.rooms.room_number}</TableCell>
-                        <TableCell>{format(new Date(resident.entry_date), "dd/MM/yyyy")}</TableCell>
-                        <TableCell>{format(new Date(resident.tanggal_keluar), "dd/MM/yyyy")}</TableCell>
+                      <TableRow key={resident.id} className="hover:bg-muted/40 transition-colors">
                         <TableCell>
-                          {calculateStayDuration(resident.entry_date, resident.tanggal_keluar)}
+                          <div className="flex items-center gap-3 min-w-0">
+                            <InitialsAvatar name={resident.full_name} seed={resident.rooms?.room_number} className="h-9 w-9 text-xs" />
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{resident.full_name}</div>
+                              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Home className="h-3 w-3" /> Kamar {resident.rooms.room_number}
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {format(new Date(resident.entry_date), "d MMM yyyy", { locale: localeId })}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {format(new Date(resident.tanggal_keluar), "d MMM yyyy", { locale: localeId })}
                         </TableCell>
                         <TableCell>
-                          <Button variant="outline" size="sm" onClick={() => handleOpenRentAgain(resident)} className="flex items-center gap-1">
-                            <UserPlus className="h-4 w-4" /> Kos Lagi
+                          <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 whitespace-nowrap">
+                            <CalendarDays className="h-3 w-3" />
+                            {calculateStayDuration(resident.entry_date, resident.tanggal_keluar)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm" onClick={() => handleOpenRentAgain(resident)} className="inline-flex items-center gap-1.5 h-8 rounded-full border-primary/20 bg-primary/10 text-primary hover:bg-primary hover:text-white hover:border-primary">
+                            <UserPlus className="h-3.5 w-3.5" /> Kos Lagi
                           </Button>
                         </TableCell>
                       </TableRow>

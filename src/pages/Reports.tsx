@@ -3,11 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { Download, TrendingUp, Users, Home, DollarSign } from "lucide-react";
+import { Download, TrendingUp, TrendingDown, CalendarDays, Users, Home, DollarSign, Wallet } from "lucide-react";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import jsPDF from "jspdf";
 
@@ -67,22 +66,42 @@ export default function Reports() {
   };
 
   const fetchMonthlyIncome = async () => {
+    // Ambil pembayaran pada tahun terpilih: bulanan dicari lewat payment_date, harian
+    // lewat periode_mulai (periode sewa mulai pada tahun terpilih).
+    const yearStart = `${selectedYear}-01-01`;
+    const yearEnd = `${parseInt(selectedYear) + 1}-01-01`;
     const { data, error } = await supabase
       .from("payments")
-      .select("payment_month, amount")
-      .gte("payment_date", `${selectedYear}-01-01`)
-      .lt("payment_date", `${parseInt(selectedYear) + 1}-01-01`);
+      .select("payment_month, amount, periode_mulai")
+      .or(`and(payment_date.gte.${yearStart},payment_date.lt.${yearEnd}),and(periode_mulai.gte.${yearStart},periode_mulai.lt.${yearEnd})`);
 
     if (error) throw error;
 
-    const monthlyIncome = months.map(month => {
-      const monthPayments = data?.filter(p => p.payment_month === month) || [];
-      return {
-        month,
-        income: monthPayments.reduce((sum, p) => sum + p.amount, 0),
-        payments: monthPayments.length,
-      };
+    // Bulanan: dihitung ke bulan sesuai payment_month (nama bulan), tahun mengikuti
+    // payment_date seperti sebelumnya. Harian: dihitung utuh ke bulan periode_mulai
+    // (keseluruhan ke bulan mulai) agar akurat lintas bulan/tahun tanpa dobel-hitung.
+    const yearNum = parseInt(selectedYear);
+    const sums = Array(12).fill(0);
+    const counts = Array(12).fill(0);
+    (data || []).forEach((p) => {
+      let bucket = -1;
+      if (p.periode_mulai) {
+        const start = new Date(p.periode_mulai + "T00:00:00");
+        if (start.getFullYear() === yearNum) bucket = start.getMonth();
+      } else {
+        bucket = months.indexOf(p.payment_month);
+      }
+      if (bucket >= 0 && bucket < 12) {
+        sums[bucket] += Number(p.amount);
+        counts[bucket] += 1;
+      }
     });
+
+    const monthlyIncome = months.map((month, i) => ({
+      month,
+      income: sums[i],
+      payments: counts[i],
+    }));
 
     setMonthlyData(monthlyIncome);
     setTotalIncome(monthlyIncome.reduce((sum, m) => sum + m.income, 0));
@@ -206,77 +225,66 @@ export default function Reports() {
 
       <div className={isLoading ? 'hidden' : ''}>
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <Card className="shadow-sm">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-primary shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[11px] md:text-sm font-medium text-muted-foreground truncate">Pendapatan</p>
-                <p className="text-sm md:text-2xl font-bold truncate">Rp {totalIncome.toLocaleString("id-ID")}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-red-500 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[11px] md:text-sm font-medium text-muted-foreground truncate">Pengeluaran</p>
-                <p className="text-sm md:text-2xl font-bold truncate">Rp {totalExpenses.toLocaleString("id-ID")}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-blue-500 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[11px] md:text-sm font-medium text-muted-foreground truncate">Penghuni</p>
-                <p className="text-sm md:text-2xl font-bold truncate">{totalResidents}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center gap-2">
-              <Home className="h-5 w-5 text-emerald-500 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[11px] md:text-sm font-medium text-muted-foreground truncate">Tingkat Hunian</p>
-                <p className="text-sm md:text-2xl font-bold truncate">{occupancyRate.toFixed(1)}%</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <TrendingUp className="h-8 w-8 text-primary" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Rata-rata Pendapatan</p>
-                <p className="text-2xl font-bold">
-                  Rp {Math.round(totalIncome / 12).toLocaleString("id-ID")}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4">
+        {[
+          {
+            label: "Pendapatan",
+            value: `Rp ${totalIncome.toLocaleString("id-ID")}`,
+            sub: `Tahun ${selectedYear}`,
+            icon: DollarSign,
+            tint: "bg-emerald-500/10 text-emerald-600",
+          },
+          {
+            label: "Pengeluaran",
+            value: `Rp ${totalExpenses.toLocaleString("id-ID")}`,
+            sub: `Tahun ${selectedYear}`,
+            icon: TrendingDown,
+            tint: "bg-red-500/10 text-red-500",
+          },
+          {
+            label: "Penghuni",
+            value: String(totalResidents),
+            sub: "aktif",
+            icon: Users,
+            tint: "bg-blue-500/10 text-blue-500",
+          },
+          {
+            label: "Tingkat Hunian",
+            value: `${occupancyRate.toFixed(1)}%`,
+            sub: `${occupancyData[0]?.value ?? 0} dari ${(occupancyData[0]?.value ?? 0) + (occupancyData[1]?.value ?? 0)} kamar terisi`,
+            icon: Home,
+            tint: "bg-amber-500/10 text-amber-500",
+          },
+          {
+            label: "Rata-rata Pendapatan",
+            value: `Rp ${Math.round(totalIncome / 12).toLocaleString("id-ID")}`,
+            sub: "per bulan",
+            icon: TrendingUp,
+            tint: "bg-violet-500/10 text-violet-600",
+          },
+          {
+            label: "Rata-rata Pengeluaran",
+            value: `Rp ${Math.round(totalExpenses / 12).toLocaleString("id-ID")}`,
+            sub: "per bulan",
+            icon: Wallet,
+            tint: "bg-rose-500/10 text-rose-500",
+          },
+        ].map(({ label, value, sub, icon: Icon, tint }) => (
+          <Card key={label} className="rounded-2xl shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground leading-tight">
+                  {label}
                 </p>
+                <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${tint}`}>
+                  <Icon className="h-4 w-4" />
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <TrendingUp className="h-8 w-8 text-red-500" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Rata-rata Pengeluaran</p>
-                <p className="text-2xl font-bold">
-                  Rp {Math.round(totalExpenses / 12).toLocaleString("id-ID")}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              <p className="text-xl md:text-2xl font-bold mt-2 truncate">{value}</p>
+              <p className="text-[11px] md:text-xs text-muted-foreground mt-1 truncate">{sub}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Charts */}
@@ -368,45 +376,87 @@ export default function Reports() {
       <CardContent className="pt-0">
         {/* Mobile card list */}
         <div className="block md:hidden space-y-2">
-          {monthlyData.map((month, idx) => (
-            <div key={month.month} className="flex items-center justify-between p-3 border rounded-xl">
-              <div className="min-w-0">
-                <p className="font-medium text-sm">{month.month}</p>
-                <p className="text-[11px] text-muted-foreground">{month.payments} pembayaran</p>
+          {monthlyData.map((month, idx) => {
+            const hasIncome = month.income > 0;
+            return (
+              <div key={month.month} className="rounded-xl border bg-card p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <CalendarDays className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold leading-tight">{month.month}</p>
+                      <p className="text-xs text-muted-foreground">{month.payments} pembayaran</p>
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-semibold text-emerald-600">+Rp {month.income.toLocaleString("id-ID")}</p>
+                    <p className="text-sm font-semibold text-red-500">-Rp {monthlyExpenses[idx].toLocaleString("id-ID")}</p>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  {hasIncome ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+                      <TrendingUp className="h-3 w-3" />
+                      Ada Pendapatan
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-inset ring-slate-400/10">
+                      <TrendingDown className="h-3 w-3" />
+                      Tidak Ada
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="text-right shrink-0 ml-3">
-                <p className="text-sm font-semibold text-emerald-600">+{month.income.toLocaleString("id-ID")}</p>
-                <p className="text-sm font-semibold text-red-500">-{monthlyExpenses[idx].toLocaleString("id-ID")}</p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
-          <Table className="min-w-[720px]">
+          <Table className="min-w-[760px]">
             <TableHeader>
-              <TableRow>
-                <TableHead>Bulan</TableHead>
-                <TableHead>Jumlah Pembayaran</TableHead>
-                <TableHead>Total Pendapatan</TableHead>
-                <TableHead>Total Pengeluaran</TableHead>
-                <TableHead>Status</TableHead>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="h-11">Bulan</TableHead>
+                <TableHead className="h-11 text-center">Jumlah Pembayaran</TableHead>
+                <TableHead className="h-11 text-right">Total Pendapatan</TableHead>
+                <TableHead className="h-11 text-right">Total Pengeluaran</TableHead>
+                <TableHead className="h-11 text-right">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {monthlyData.map((month, idx) => (
-                <TableRow key={month.month}>
-                  <TableCell className="font-medium">{month.month}</TableCell>
-                  <TableCell>{month.payments}</TableCell>
-                  <TableCell>Rp {month.income.toLocaleString("id-ID")}</TableCell>
-                  <TableCell>Rp {monthlyExpenses[idx].toLocaleString("id-ID")}</TableCell>
-                  <TableCell>
-                    <Badge variant={month.income > 0 ? "default" : "secondary"}>
-                      {month.income > 0 ? "Ada Pendapatan" : "Tidak Ada"}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {monthlyData.map((month, idx) => {
+                const hasIncome = month.income > 0;
+                return (
+                  <TableRow key={month.month} className="group">
+                    <TableCell className="text-sm font-semibold">{month.month}</TableCell>
+                    <TableCell className="text-center">
+                      <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-muted px-2 text-xs font-semibold text-muted-foreground">
+                        {month.payments}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right text-sm font-semibold text-emerald-600">
+                      Rp {month.income.toLocaleString("id-ID")}
+                    </TableCell>
+                    <TableCell className="text-right text-sm font-semibold text-red-500">
+                      Rp {monthlyExpenses[idx].toLocaleString("id-ID")}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {hasIncome ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+                          <TrendingUp className="h-3 w-3" />
+                          Ada Pendapatan
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-inset ring-slate-400/10">
+                          <TrendingDown className="h-3 w-3" />
+                          Tidak Ada
+                        </span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>

@@ -21,12 +21,12 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   PlusCircle, Trash2, Receipt, CheckCircle, XCircle, Clock,
-  MoreHorizontal, Download, Share2, Ban,
+  MoreHorizontal, Download, Share2, Ban, Home, Phone,
 } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
@@ -94,17 +94,20 @@ const formatTanggalID = (dateStr: string) => {
   }
 };
 
+const chipCls =
+  "inline-flex items-center gap-1 text-xs font-semibold border rounded-full px-2.5 py-1 whitespace-nowrap";
+
 const getStatusBadge = (status: DPReservasi["status"], deadline: string) => {
   // Auto-detect hangus di frontend untuk tampilan
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const deadlineDate = new Date(deadline + "T00:00:00");
   if (status === "Menunggu" && today > deadlineDate) {
-    return <Badge variant="destructive" className="gap-1"><XCircle className="h-3 w-3" />DP Hangus</Badge>;
+    return <span className={`${chipCls} bg-rose-100 text-rose-700 border-rose-200`}><XCircle className="h-3 w-3" />DP Hangus</span>;
   }
-  if (status === "Hangus") return <Badge variant="destructive" className="gap-1"><XCircle className="h-3 w-3" />Hangus</Badge>;
-  if (status === "Lunas") return <Badge className="bg-green-600 hover:bg-green-700 gap-1"><CheckCircle className="h-3 w-3" />Lunas</Badge>;
-  return <Badge variant="secondary" className="gap-1"><Clock className="h-3 w-3" />Menunggu</Badge>;
+  if (status === "Hangus") return <span className={`${chipCls} bg-rose-100 text-rose-700 border-rose-200`}><XCircle className="h-3 w-3" />Hangus</span>;
+  if (status === "Lunas") return <span className={`${chipCls} bg-emerald-100 text-emerald-700 border-emerald-200`}><CheckCircle className="h-3 w-3" />Lunas</span>;
+  return <span className={`${chipCls} bg-amber-100 text-amber-700 border-amber-200`}><Clock className="h-3 w-3" />Menunggu</span>;
 };
 
 const isHangus = (status: DPReservasi["status"], deadline: string) => {
@@ -127,6 +130,12 @@ export default function DPReservasi() {
   const [mobileSheetReservasi, setMobileSheetReservasi] = useState<DPReservasi | null>(null);
   const { toast } = useToast();
   const isMobile = useIsMobile();
+
+  // Filter periode daftar — bawaan: bulan & tahun berjalan, jadi saat bulan berganti
+  // (mis. tanggal 1) data lama otomatis tidak tampil. Pilih "Semua" / periode lain
+  // untuk melihat data lama — data tidak pernah dihapus, hanya disaring tampilan.
+  const [filterMonth, setFilterMonth] = useState(months[new Date().getMonth()]);
+  const [filterYear, setFilterYear] = useState(new Date().getFullYear().toString());
 
   const [formData, setFormData] = useState({
     nama_calon: "",
@@ -498,14 +507,32 @@ export default function DPReservasi() {
     setIsPelunasanDialogOpen(true);
   };
 
-  // Statistik
-  const stats = useMemo(() => {
-    const menunggu = reservasiList.filter(r => r.status === "Menunggu" && !isHangus(r.status, r.deadline_pelunasan)).length;
-    const lunas = reservasiList.filter(r => r.status === "Lunas").length;
-    const hangus = reservasiList.filter(r => isHangus(r.status, r.deadline_pelunasan)).length;
-    const totalDP = reservasiList.filter(r => r.status === "Lunas").reduce((s, r) => s + r.nominal_dp, 0);
-    return { menunggu, lunas, hangus, totalDP };
+  const availableYears = useMemo(() => {
+    const set = new Set<string>([new Date().getFullYear().toString()]);
+    reservasiList.forEach((r) => {
+      if (r.tanggal_dp) set.add(new Date(r.tanggal_dp + "T00:00:00").getFullYear().toString());
+    });
+    return Array.from(set).sort((a, b) => Number(b) - Number(a));
   }, [reservasiList]);
+
+  const filteredList = useMemo(() => {
+    return reservasiList.filter((r) => {
+      if (!r.tanggal_dp) return false;
+      const d = new Date(r.tanggal_dp + "T00:00:00");
+      if (filterMonth !== "Semua" && months[d.getMonth()] !== filterMonth) return false;
+      if (filterYear !== "Semua" && d.getFullYear().toString() !== filterYear) return false;
+      return true;
+    });
+  }, [reservasiList, filterMonth, filterYear]);
+
+  // Statistik mengikuti periode terpilih agar angka sesuai data yang tampil
+  const stats = useMemo(() => {
+    const menunggu = filteredList.filter(r => r.status === "Menunggu" && !isHangus(r.status, r.deadline_pelunasan)).length;
+    const lunas = filteredList.filter(r => r.status === "Lunas").length;
+    const hangus = filteredList.filter(r => isHangus(r.status, r.deadline_pelunasan)).length;
+    const totalDP = filteredList.filter(r => r.status === "Lunas").reduce((s, r) => s + r.nominal_dp, 0);
+    return { menunggu, lunas, hangus, totalDP };
+  }, [filteredList]);
 
   return (
     <div className="space-y-6">
@@ -691,8 +718,46 @@ export default function DPReservasi() {
 
       {/* Tabel / List */}
       <Card>
-        <CardHeader>
-          <CardTitle>Daftar Reservasi DP</CardTitle>
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="min-w-0">
+            <CardTitle>Daftar Reservasi DP</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              {filterMonth !== "Semua" ? `Bulan ${filterMonth}` : "Semua bulan"}
+              {filterYear !== "Semua" ? ` ${filterYear}` : " semua tahun"} · data lama tersimpan dan bisa dilihat via filter periode
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <Select value={filterMonth} onValueChange={setFilterMonth}>
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Semua">Semua Bulan</SelectItem>
+                {months.map((m) => (
+                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterYear} onValueChange={setFilterYear}>
+              <SelectTrigger className="w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Semua">Semua Tahun</SelectItem>
+                {availableYears.map((y) => (
+                  <SelectItem key={y} value={y}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {(filterMonth !== "Semua" || filterYear !== "Semua") && (
+              <Button variant="outline" size="sm" className="h-9 rounded-full" onClick={() => {
+                setFilterMonth(months[new Date().getMonth()]);
+                setFilterYear(new Date().getFullYear().toString());
+              }}>
+                Reset
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {loadingData ? (
@@ -703,21 +768,28 @@ export default function DPReservasi() {
             <div className="text-center py-12 text-muted-foreground">
               Belum ada data reservasi DP
             </div>
+          ) : filteredList.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              Tidak ada reservasi pada periode ini
+            </div>
           ) : (
             <>
               {/* Mobile Cards */}
               <div className="block md:hidden space-y-3">
-                {reservasiList.map(reservasi => (
+                {filteredList.map(reservasi => (
                   <div key={reservasi.id} className="rounded-lg border p-4 bg-card space-y-3">
                     {/* Baris 1: Nama + Status */}
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="font-semibold truncate">{reservasi.nama_calon}</div>
-                        <div className="text-sm text-muted-foreground">
-                          Kamar {reservasi.rooms?.room_number}
-                          {reservasi.phone_number && (
-                            <span className="ml-2 text-xs">· {reservasi.phone_number}</span>
-                          )}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <InitialsAvatar name={reservasi.nama_calon} seed={reservasi.rooms?.room_number} className="h-10 w-10 text-sm" />
+                        <div className="min-w-0">
+                          <div className="font-semibold truncate">{reservasi.nama_calon}</div>
+                          <div className="text-sm text-muted-foreground flex items-center gap-1">
+                            <Home className="h-3 w-3" /> Kamar {reservasi.rooms?.room_number}
+                            {reservasi.phone_number && (
+                              <span className="ml-1 text-xs">· {reservasi.phone_number}</span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="shrink-0">
@@ -736,11 +808,11 @@ export default function DPReservasi() {
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">Tanggal DP</p>
-                        <p className="font-medium">{format(new Date(reservasi.tanggal_dp + "T00:00:00"), "dd/MM/yyyy")}</p>
+                        <p className="font-medium">{format(new Date(reservasi.tanggal_dp + "T00:00:00"), "d MMM yyyy", { locale: idLocale })}</p>
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">Deadline</p>
-                        <p className="font-medium">{format(new Date(reservasi.deadline_pelunasan + "T00:00:00"), "dd/MM/yyyy")}</p>
+                        <p className="font-medium">{format(new Date(reservasi.deadline_pelunasan + "T00:00:00"), "d MMM yyyy", { locale: idLocale })}</p>
                       </div>
                     </div>
                     {/* Baris 3: Tombol Aksi */}
@@ -772,8 +844,7 @@ export default function DPReservasi() {
                 <Table className="min-w-[820px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="min-w-[160px]">Nama Calon</TableHead>
-                      <TableHead className="w-[90px]">Kamar</TableHead>
+                      <TableHead className="w-[260px]">Calon Penghuni</TableHead>
                       <TableHead className="w-[130px]">Nominal DP</TableHead>
                       <TableHead className="w-[130px]">Sisa Pelunasan</TableHead>
                       <TableHead className="w-[100px]">Tgl DP</TableHead>
@@ -783,24 +854,39 @@ export default function DPReservasi() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reservasiList.map(reservasi => (
-                      <TableRow key={reservasi.id}>
+                    {filteredList.map(reservasi => (
+                      <TableRow key={reservasi.id} className="hover:bg-muted/40 transition-colors">
                         <TableCell>
-                          <div className="font-medium">{reservasi.nama_calon}</div>
-                          {reservasi.phone_number && (
-                            <div className="text-xs text-muted-foreground mt-0.5">{reservasi.phone_number}</div>
-                          )}
+                          <div className="flex items-center gap-3 min-w-0">
+                            <InitialsAvatar name={reservasi.nama_calon} seed={reservasi.rooms?.room_number} className="h-9 w-9 text-xs" />
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{reservasi.nama_calon}</div>
+                              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Home className="h-3 w-3" /> Kamar {reservasi.rooms?.room_number}
+                              </div>
+                              {reservasi.phone_number && (
+                                <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Phone className="h-3 w-3" /> {reservasi.phone_number}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </TableCell>
-                        <TableCell>Kamar {reservasi.rooms?.room_number}</TableCell>
                         <TableCell className="font-medium">{formatRupiah(reservasi.nominal_dp)}</TableCell>
                         <TableCell className="font-medium text-primary">{formatRupiah(reservasi.nominal_pelunasan)}</TableCell>
-                        <TableCell className="whitespace-nowrap">{format(new Date(reservasi.tanggal_dp + "T00:00:00"), "dd/MM/yyyy")}</TableCell>
-                        <TableCell className="whitespace-nowrap">{format(new Date(reservasi.deadline_pelunasan + "T00:00:00"), "dd/MM/yyyy")}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{format(new Date(reservasi.tanggal_dp + "T00:00:00"), "d MMM yyyy", { locale: idLocale })}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{format(new Date(reservasi.deadline_pelunasan + "T00:00:00"), "d MMM yyyy", { locale: idLocale })}</TableCell>
                         <TableCell>{getStatusBadge(reservasi.status, reservasi.deadline_pelunasan)}</TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 rounded-full border-primary/20 bg-primary/10 text-primary hover:border-primary hover:bg-primary hover:text-white"
+                                title="Aksi reservasi"
+                                aria-label="Aksi reservasi"
+                              >
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
