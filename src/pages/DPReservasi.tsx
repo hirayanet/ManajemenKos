@@ -405,7 +405,7 @@ export default function DPReservasi() {
       const shareText =
         `Berikut bukti Down Payment (DP) kost:\n\n` +
         `🏠 Nama: ${reservasi.nama_calon}\n` +
-        `🚪 Kamar: ${reservasi.rooms?.room_number != null ? `Kamar ${reservasi.rooms.room_number}` : "-"}\n` +
+        `🚪 Kamar: ${reservasi.rooms?.room_number != null ? reservasi.rooms.room_number : "-"}\n` +
         `💰 Nominal DP: ${formatRupiah(reservasi.nominal_dp)}\n` +
         `💵 Sisa Pelunasan: ${formatRupiah(reservasi.nominal_pelunasan)}\n` +
         `⏳ Deadline Pelunasan: ${deadlineFormatted}\n\n` +
@@ -455,7 +455,7 @@ export default function DPReservasi() {
       const shareText =
         `Berikut kwitansi pelunasan kost untuk periode: *${periodeSewa}*\n\n` +
         `🏠 Nama: ${reservasi.nama_calon}\n` +
-        `🚪 Kamar: ${reservasi.rooms?.room_number != null ? `Kamar ${reservasi.rooms.room_number}` : "-"}\n` +
+        `🚪 Kamar: ${reservasi.rooms?.room_number != null ? reservasi.rooms.room_number : "-"}\n` +
         `💵 DP Sebelumnya: ${formatRupiah(reservasi.nominal_dp)}\n` +
         `💰 Pelunasan: ${formatRupiah(reservasi.nominal_pelunasan)}\n` +
         `🧾 Total: ${formatRupiah(reservasi.harga_per_bulan)}\n` +
