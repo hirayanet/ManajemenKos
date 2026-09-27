@@ -338,7 +338,7 @@ export default function Payments() {
 
       const kamarTxt =
         payment.residents.rooms?.room_number != null
-          ? `Kamar ${payment.residents.rooms.room_number}`
+          ? `${payment.residents.rooms.room_number}`
           : "-";
       const shareText = `Berikut kwitansi pembayaran sewa kos untuk periode: *${periodeSewa}*\n\n🏠 Nama: ${payment.residents.full_name}\n🚪 Kamar: ${kamarTxt}\n💰 Nominal: Rp ${payment.amount.toLocaleString('id-ID')}\n💳 Metode Pembayaran: ${payment.payment_method}\n📆 Tanggal Bayar: ${format(new Date(payment.payment_date), 'dd MMMM yyyy', { locale: undefined })}\n\nSilakan klik link berikut untuk melihat kwitansi:\n${viewerUrl}\n\nTerima kasih telah melakukan pembayaran tepat waktu.\nSalam,\nPengelola Kos`;
       setShareModal({ url: viewerUrl, text: shareText });
