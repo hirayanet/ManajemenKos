@@ -18,6 +18,8 @@ interface PaymentData {
   periode_mulai: string | null;
   periode_selesai: string | null;
   payment_method: string;
+  wifi_devices?: number | null;
+  wifi_fee?: number | null;
   residents: {
     full_name: string;
     entry_date: string;
@@ -78,6 +80,8 @@ export default function KwitansiView() {
         periode_mulai: payment.periode_mulai ?? null,
         periode_selesai: payment.periode_selesai ?? null,
       });
+      const hasWifi = Boolean(payment.wifi_devices && payment.wifi_devices > 0 && payment.wifi_fee);
+      const baseRoomAmount = hasWifi ? payment.amount - (payment.wifi_fee || 0) : payment.amount;
       const blob = await generateKwitansiImage({
         namaPenyewa: payment.residents?.full_name || "-",
         kamar: payment.residents?.rooms?.room_number?.toString() || "-",
@@ -85,6 +89,9 @@ export default function KwitansiView() {
         nominal: `Rp ${payment.amount.toLocaleString("id-ID")}`,
         tanggalBayar: format(new Date(payment.payment_date), "dd MMMM yyyy"),
         metodePembayaran: payment.payment_method,
+        wifiDevices: payment.wifi_devices || undefined,
+        wifiFee: payment.wifi_fee || undefined,
+        biayaKamar: hasWifi ? `Rp ${baseRoomAmount.toLocaleString("id-ID")}` : undefined,
       });
       setImageBlob(blob);
       setImageUrl(URL.createObjectURL(blob));
@@ -108,6 +115,8 @@ export default function KwitansiView() {
   const handleDownloadPDF = async () => {
     if (!payment) return;
     try {
+      const hasWifi = Boolean(payment.wifi_devices && payment.wifi_devices > 0 && payment.wifi_fee);
+      const baseRoomAmount = hasWifi ? payment.amount - (payment.wifi_fee || 0) : payment.amount;
       const { doc } = await generateKwitansiPDF({
         namaPenyewa: payment.residents?.full_name || "-",
         tanggalMasuk: payment.residents?.entry_date || "",
@@ -124,6 +133,9 @@ export default function KwitansiView() {
           periode_mulai: payment.periode_mulai ?? null,
           periode_selesai: payment.periode_selesai ?? null,
         }),
+        wifiDevices: payment.wifi_devices || undefined,
+        wifiFee: payment.wifi_fee || undefined,
+        biayaKamar: hasWifi ? `Rp ${baseRoomAmount.toLocaleString("id-ID")}` : undefined,
       });
       doc.save(`kwitansi-${payment.residents?.full_name?.replace(/\s+/g, "_")}-${payment.payment_date}.pdf`);
     } catch (err) {

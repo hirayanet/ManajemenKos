@@ -35,6 +35,9 @@ export async function generateKwitansiPDF(
     metodePembayaran,
     bulanSewa,
     periodeSewa: periodeSewaOverride,
+    wifiDevices,
+    wifiFee,
+    biayaKamar,
   }: {
     namaPenyewa: string;
     tanggalMasuk: string; // format yyyy-mm-dd
@@ -45,6 +48,9 @@ export async function generateKwitansiPDF(
     metodePembayaran: string;
     bulanSewa?: string;
     periodeSewa?: string; // bila diisi (format "1 Agustus 2026 - 3 Agustus 2026"), dipakai langsung
+    wifiDevices?: number;
+    wifiFee?: number;
+    biayaKamar?: string;
   },
   overrides?: { brand?: BrandSettings }
 ): Promise<{ doc: jsPDF; periodeSewa: string }> {
@@ -112,19 +118,35 @@ export async function generateKwitansiPDF(
     startY: top + 8,
   });
 
-  y = kvSection(doc, y, [
+  const kvRows: [string, string][] = [
     ["Nama Penyewa", namaPenyewa],
     ["Kamar", kamarLabel(kamar)],
     ["Periode Sewa", periodeSewa],
     ["Tanggal Pembayaran", formatTanggalID(tanggal)],
     ["Metode Pembayaran", metodePembayaran],
-  ]);
+  ];
+
+  if (wifiDevices && wifiDevices > 0 && wifiFee) {
+    if (biayaKamar) {
+      kvRows.push(["Biaya Sewa Kamar", biayaKamar]);
+    }
+    kvRows.push([
+      `Tambahan Akses Wi-Fi (${wifiDevices} Perangkat)`,
+      `Rp ${wifiFee.toLocaleString("id-ID")}`,
+    ]);
+  }
+
+  y = kvSection(doc, y, kvRows);
 
   y = amountBand(doc, y + 4, "Total Pembayaran", nominal);
 
+  const wifiNoteText =
+    wifiDevices && wifiDevices > 0
+      ? ` dan Tambahan Akses Wi-Fi (${wifiDevices} Perangkat)`
+      : "";
   y = noteText(
     doc,
-    `Pembayaran sewa periode ${periodeSewa} atas nama ${namaPenyewa} (${kamarLabel(kamar)}) telah diterima.`,
+    `Pembayaran sewa periode ${periodeSewa}${wifiNoteText} atas nama ${namaPenyewa} (${kamarLabel(kamar)}) telah diterima.`,
     y + 4
   );
   y += 4;

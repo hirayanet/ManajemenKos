@@ -13,6 +13,9 @@ export interface KwitansiImageData {
   tanggalBayar: string;
   metodePembayaran: string;
   logoBase64?: string;
+  wifiDevices?: number;
+  wifiFee?: number;
+  biayaKamar?: string;
 }
 
 export interface KwitansiDPImageData {
@@ -133,8 +136,9 @@ interface StrukLayout {
 
 async function renderStruk(layout: StrukLayout, brand: BrandSettings): Promise<Blob> {
   return new Promise((resolve, reject) => {
+    const extraRows = Math.max(0, layout.rowsBefore.length - 3);
     const W = 500;
-    const H = 780;
+    const H = 780 + extraRows * 40;
     const dpr = 2;
     const canvas = document.createElement("canvas");
     canvas.width = W * dpr;
@@ -290,15 +294,27 @@ export async function generateKwitansiImage(
   overrides?: { brand?: BrandSettings }
 ): Promise<Blob> {
   const brand = await resolveBrand(overrides);
+  const rowsBefore: [string, string][] = [
+    ["Nama Penyewa", data.namaPenyewa],
+    ["Kamar", data.kamar],
+    ["Periode Sewa", data.periodeSewa],
+  ];
+
+  if (data.wifiDevices && data.wifiDevices > 0 && data.wifiFee) {
+    if (data.biayaKamar) {
+      rowsBefore.push(["Biaya Sewa Kamar", data.biayaKamar]);
+    }
+    rowsBefore.push([
+      `Tambahan Akses Wi-Fi (${data.wifiDevices} Perangkat)`,
+      `Rp ${data.wifiFee.toLocaleString("id-ID")}`,
+    ]);
+  }
+
   return renderStruk(
     {
       headerLabel: "BUKTI PEMBAYARAN",
-      rowsBefore: [
-        ["Nama Penyewa", data.namaPenyewa],
-        ["Kamar", data.kamar],
-        ["Periode Sewa", data.periodeSewa],
-      ],
-      amountLabel: "NOMINAL PEMBAYARAN",
+      rowsBefore,
+      amountLabel: data.wifiDevices && data.wifiDevices > 0 ? "TOTAL PEMBAYARAN" : "NOMINAL PEMBAYARAN",
       amountValue: data.nominal,
       rowsAfter: [
         ["Tanggal Bayar", data.tanggalBayar],

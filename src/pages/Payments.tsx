@@ -9,11 +9,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { PlusCircle, Edit, Trash2, Download, Receipt, ReceiptText, Home, CalendarDays, Wallet, Pencil } from "lucide-react";
+import { PlusCircle, Edit, Trash2, Download, Receipt, ReceiptText, Home, CalendarDays, Wallet, Pencil, Wifi } from "lucide-react";
 import { id as localeId } from "date-fns/locale";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { WhatsappIcon } from '@/components/ui/WhatsappIcon';
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -63,6 +64,8 @@ interface Payment {
   payment_method: string;
   receipt_url?: string;
   created_at: string;
+  wifi_devices?: number | null;
+  wifi_fee?: number | null;
   residents: {
     full_name: string;
     rooms: { room_number: number };
@@ -113,6 +116,40 @@ export default function Payments() {
   const [dailyRate, setDailyRate] = useState("");
   const [numDays, setNumDays] = useState("");
   const [dailyStart, setDailyStart] = useState(""); // Tanggal mulai sewa (khusus harian)
+
+  // State Layanan Tambahan Wi-Fi
+  const [hasWifiAddon, setHasWifiAddon] = useState(false);
+  const [wifiDevices, setWifiDevices] = useState("1");
+  const [wifiFee, setWifiFee] = useState("25000");
+  const [roomBasePrice, setRoomBasePrice] = useState("");
+
+  const handleToggleWifi = (checked: boolean) => {
+    setHasWifiAddon(checked);
+    const base = parseFloat(roomBasePrice) || (checked ? parseFloat(formData.amount) || 0 : (parseFloat(formData.amount) || 0) - (parseFloat(wifiFee) || 0));
+    const fee = parseFloat(wifiFee) || 25000;
+    if (checked) {
+      setRoomBasePrice(base > 0 ? base.toString() : "");
+      setFormData((prev) => ({ ...prev, amount: (base + fee).toString() }));
+    } else {
+      setFormData((prev) => ({ ...prev, amount: (base > 0 ? base : 0).toString() }));
+    }
+  };
+
+  const handleWifiDevicesChange = (val: string) => {
+    setWifiDevices(val);
+    const count = parseInt(val) || 0;
+    const calculatedFee = (count * 25000).toString();
+    setWifiFee(calculatedFee);
+    const base = parseFloat(roomBasePrice) || (parseFloat(formData.amount) || 0) - (parseFloat(wifiFee) || 0);
+    setFormData((prev) => ({ ...prev, amount: (base + (parseFloat(calculatedFee) || 0)).toString() }));
+  };
+
+  const handleWifiFeeChange = (val: string) => {
+    setWifiFee(val);
+    const base = parseFloat(roomBasePrice) || (parseFloat(formData.amount) || 0) - (parseFloat(wifiFee) || 0);
+    const fee = parseFloat(val) || 0;
+    setFormData((prev) => ({ ...prev, amount: (base + fee).toString() }));
+  };
 
   const paymentMethods = [
     "Tunai",
@@ -269,6 +306,8 @@ export default function Payments() {
         periode_mulai: payment.periode_mulai ?? null,
         periode_selesai: payment.periode_selesai ?? null,
       });
+      const hasWifi = Boolean(payment.wifi_devices && payment.wifi_devices > 0 && payment.wifi_fee);
+      const baseRoomAmount = hasWifi ? payment.amount - (payment.wifi_fee || 0) : payment.amount;
       await downloadKwitansiImage(
         {
           namaPenyewa: payment.residents.full_name,
@@ -277,6 +316,9 @@ export default function Payments() {
           nominal: `Rp ${payment.amount.toLocaleString('id-ID')}`,
           tanggalBayar: format(new Date(payment.payment_date), 'dd MMMM yyyy'),
           metodePembayaran: payment.payment_method,
+          wifiDevices: payment.wifi_devices || undefined,
+          wifiFee: payment.wifi_fee || undefined,
+          biayaKamar: hasWifi ? `Rp ${baseRoomAmount.toLocaleString('id-ID')}` : undefined,
         },
         `kwitansi-${payment.residents.full_name.replace(/\s+/g, '_')}-${payment.payment_date}.png`
       );
@@ -295,6 +337,8 @@ export default function Payments() {
       periode_mulai: payment.periode_mulai ?? null,
       periode_selesai: payment.periode_selesai ?? null,
     });
+    const hasWifi = Boolean(payment.wifi_devices && payment.wifi_devices > 0 && payment.wifi_fee);
+    const baseRoomAmount = hasWifi ? payment.amount - (payment.wifi_fee || 0) : payment.amount;
     const { doc } = await generateKwitansiPDF({
       namaPenyewa: payment.residents.full_name,
       tanggalMasuk: payment.residents.entry_date, // gunakan entry_date sebagai tanggal masuk penghuni
@@ -305,6 +349,9 @@ export default function Payments() {
       metodePembayaran: payment.payment_method,
       bulanSewa: payment.payment_month,
       periodeSewa,
+      wifiDevices: payment.wifi_devices || undefined,
+      wifiFee: payment.wifi_fee || undefined,
+      biayaKamar: hasWifi ? `Rp ${baseRoomAmount.toLocaleString('id-ID')}` : undefined,
     });
     doc.save(`kwitansi-${payment.residents.full_name}-${payment.payment_date}.pdf`);
   };
@@ -340,7 +387,12 @@ export default function Payments() {
         payment.residents.rooms?.room_number != null
           ? `${payment.residents.rooms.room_number}`
           : "-";
-      const shareText = `Berikut kwitansi pembayaran sewa kos untuk periode: *${periodeSewa}*\n\n🏠 Nama: ${payment.residents.full_name}\n🚪 Kamar: ${kamarTxt}\n💰 Nominal: Rp ${payment.amount.toLocaleString('id-ID')}\n💳 Metode Pembayaran: ${payment.payment_method}\n📆 Tanggal Bayar: ${format(new Date(payment.payment_date), 'dd MMMM yyyy', { locale: undefined })}\n\nSilakan klik link berikut untuk melihat kwitansi:\n${viewerUrl}\n\nTerima kasih telah melakukan pembayaran tepat waktu.\nSalam,\nPengelola Kos`;
+      const hasWifi = Boolean(payment.wifi_devices && payment.wifi_devices > 0 && payment.wifi_fee);
+      const baseRoomAmount = hasWifi ? payment.amount - (payment.wifi_fee || 0) : payment.amount;
+      const sewaTxt = hasWifi ? `\n🏠 Sewa Kamar: Rp ${baseRoomAmount.toLocaleString('id-ID')}` : '';
+      const wifiTxt = hasWifi ? `\n📶 Tambahan Akses Wi-Fi (${payment.wifi_devices} Perangkat): Rp ${(payment.wifi_fee || 0).toLocaleString('id-ID')}` : '';
+
+      const shareText = `Berikut kwitansi pembayaran sewa kos untuk periode: *${periodeSewa}*\n\n🏠 Nama: ${payment.residents.full_name}\n🚪 Kamar: ${kamarTxt}${sewaTxt}${wifiTxt}\n💰 Total Pembayaran: Rp ${payment.amount.toLocaleString('id-ID')}\n💳 Metode Pembayaran: ${payment.payment_method}\n📆 Tanggal Bayar: ${format(new Date(payment.payment_date), 'dd MMMM yyyy', { locale: undefined })}\n\nSilakan klik link berikut untuk melihat kwitansi:\n${viewerUrl}\n\nTerima kasih telah melakukan pembayaran tepat waktu.\nSalam,\nPengelola Kos`;
       setShareModal({ url: viewerUrl, text: shareText });
     } catch (err: any) {
       console.error('Error handleShareKwitansi:', err);
@@ -375,6 +427,9 @@ export default function Payments() {
         effectivePaymentMonth = months[new Date().getMonth()];
       }
 
+      const wifiDevicesNum = hasWifiAddon ? (parseInt(wifiDevices) || 0) : 0;
+      const wifiFeeNum = hasWifiAddon ? (parseFloat(wifiFee) || 0) : 0;
+
       const paymentData = {
         resident_id: formData.resident_id,
         payment_date: formData.payment_date,
@@ -383,6 +438,8 @@ export default function Payments() {
         payment_method: formData.payment_method,
         periode_mulai: periodeMulai,
         periode_selesai: periodeSelesai,
+        wifi_devices: wifiDevicesNum,
+        wifi_fee: wifiFeeNum,
       };
 
       if (selectedPayment) {
@@ -391,7 +448,17 @@ export default function Payments() {
           .update(paymentData)
           .eq("id", selectedPayment.id);
 
-        if (error) throw error;
+        if (error) {
+          if ((error as any)?.code === '42703' || error.message?.includes('wifi_devices') || error.message?.includes('wifi_fee')) {
+            toast({
+              title: "Perlu Migrasi Database",
+              description: "Kolom wifi_devices belum ada di Supabase. Silakan jalankan script SQL migrasi yang tersedia di SQL Editor Supabase.",
+              variant: "destructive",
+            });
+            return;
+          }
+          throw error;
+        }
 
         toast({
           title: "Berhasil",
@@ -402,7 +469,17 @@ export default function Payments() {
           .from("payments")
           .insert(paymentData);
 
-        if (error) throw error;
+        if (error) {
+          if ((error as any)?.code === '42703' || error.message?.includes('wifi_devices') || error.message?.includes('wifi_fee')) {
+            toast({
+              title: "Perlu Migrasi Database",
+              description: "Kolom wifi_devices belum ada di Supabase. Silakan jalankan script SQL migrasi yang tersedia di SQL Editor Supabase.",
+              variant: "destructive",
+            });
+            return;
+          }
+          throw error;
+        }
 
         toast({
           title: "Berhasil",
@@ -463,6 +540,10 @@ export default function Payments() {
     setDailyStart("");
     setDailyRate("");
     setNumDays("");
+    setHasWifiAddon(false);
+    setWifiDevices("1");
+    setWifiFee("25000");
+    setRoomBasePrice("");
   };
 
   const openEditDialog = (payment: Payment) => {
@@ -474,6 +555,13 @@ export default function Payments() {
       amount: payment.amount.toString(),
       payment_method: payment.payment_method,
     });
+    const hasWifi = Boolean((payment.wifi_devices && payment.wifi_devices > 0) || (payment.wifi_fee && payment.wifi_fee > 0));
+    setHasWifiAddon(hasWifi);
+    setWifiDevices(payment.wifi_devices ? payment.wifi_devices.toString() : "1");
+    setWifiFee(payment.wifi_fee ? payment.wifi_fee.toString() : "25000");
+    const base = hasWifi ? (payment.amount - (payment.wifi_fee || 0)) : payment.amount;
+    setRoomBasePrice(base.toString());
+
     // Detect daily payment
     const isDaily = payment.payment_month.startsWith("Harian");
     setPaymentType(isDaily ? "harian" : "bulanan");
@@ -487,7 +575,7 @@ export default function Payments() {
         const days = Math.round((endMs - startMs) / 86400000) + 1;
         setDailyStart(mulai);
         setNumDays(days > 0 ? String(days) : "");
-        setDailyRate(days > 0 && payment.amount ? String(Math.round(payment.amount / days)) : "");
+        setDailyRate(days > 0 && base ? String(Math.round(base / days)) : "");
       } else {
         // Data lama tanpa kolom periode: mulai dianggap tanggal bayar, hari diisi ulang
         setDailyStart(payment.payment_date);
@@ -648,10 +736,12 @@ export default function Payments() {
                     value={formData.resident_id} 
                     onValueChange={(value) => {
                       const selectedResident = residents.find(r => r.id === value);
-                      const autoAmount = selectedResident
-                        ? getRoomPrice(selectedResident.rooms.room_number).toString()
-                        : "";
-                      setFormData({ ...formData, resident_id: value, amount: autoAmount });
+                      const basePrice = selectedResident
+                        ? getRoomPrice(selectedResident.rooms.room_number)
+                        : 0;
+                      setRoomBasePrice(basePrice > 0 ? basePrice.toString() : "");
+                      const total = basePrice + (hasWifiAddon ? (parseFloat(wifiFee) || 0) : 0);
+                      setFormData({ ...formData, resident_id: value, amount: total > 0 ? total.toString() : "" });
                     }}
                   >
                     <SelectTrigger>
@@ -687,7 +777,9 @@ export default function Payments() {
                         const rate = e.target.value;
                         setDailyRate(rate);
                         const total = rate && numDays ? parseInt(rate) * parseInt(numDays) : 0;
-                        setFormData({ ...formData, amount: total > 0 ? total.toString() : "" });
+                        setRoomBasePrice(total > 0 ? total.toString() : "");
+                        const fullTotal = total + (hasWifiAddon ? (parseFloat(wifiFee) || 0) : 0);
+                        setFormData({ ...formData, amount: fullTotal > 0 ? fullTotal.toString() : "" });
                       }}
                       placeholder="Contoh: 50000"
                       required
@@ -703,7 +795,9 @@ export default function Payments() {
                         const days = e.target.value;
                         setNumDays(days);
                         const total = dailyRate && days ? parseInt(dailyRate) * parseInt(days) : 0;
-                        setFormData({ ...formData, amount: total > 0 ? total.toString() : "" });
+                        setRoomBasePrice(total > 0 ? total.toString() : "");
+                        const fullTotal = total + (hasWifiAddon ? (parseFloat(wifiFee) || 0) : 0);
+                        setFormData({ ...formData, amount: fullTotal > 0 ? fullTotal.toString() : "" });
                       }}
                       placeholder="Contoh: 3"
                       min="1"
@@ -764,13 +858,96 @@ export default function Payments() {
                 )}
               </div>
 
+              {/* Layanan Tambahan Wi-Fi */}
+              <div className="rounded-lg border bg-slate-50/70 p-3 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 bg-blue-100 text-blue-600 rounded-md shrink-0">
+                      <Wifi className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <Label htmlFor="wifi-toggle" className="text-sm font-semibold cursor-pointer">
+                        Tambahan Akses Wi-Fi
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Batas gratis standar: 2 perangkat/kamar.
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    id="wifi-toggle"
+                    checked={hasWifiAddon}
+                    onCheckedChange={handleToggleWifi}
+                  />
+                </div>
+
+                {hasWifiAddon && (
+                  <div className="pt-2 border-t border-slate-200/80 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="wifi_devices" className="text-xs font-medium">
+                          Jumlah Perangkat
+                        </Label>
+                        <Input
+                          id="wifi_devices"
+                          type="number"
+                          min="1"
+                          value={wifiDevices}
+                          onChange={(e) => handleWifiDevicesChange(e.target.value)}
+                          placeholder="1"
+                          required={hasWifiAddon}
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="wifi_fee" className="text-xs font-medium">
+                          Biaya Wi-Fi (Rp) <span className="text-muted-foreground font-normal">(bisa diedit)</span>
+                        </Label>
+                        <Input
+                          id="wifi_fee"
+                          type="number"
+                          min="0"
+                          value={wifiFee}
+                          onChange={(e) => handleWifiFeeChange(e.target.value)}
+                          placeholder="25000"
+                          required={hasWifiAddon}
+                          className="h-9"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Kalkulasi ringkasan */}
+                    <div className="bg-white p-2.5 rounded-md border text-xs space-y-1 text-slate-600">
+                      <div className="flex justify-between">
+                        <span>Biaya Sewa Pokok:</span>
+                        <span className="font-medium text-slate-800">
+                          Rp {(parseFloat(roomBasePrice) || 0).toLocaleString("id-ID")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-blue-600">
+                        <span>Tambahan Akses Wi-Fi ({wifiDevices || 1} Perangkat):</span>
+                        <span className="font-semibold">
+                          + Rp {(parseFloat(wifiFee) || 0).toLocaleString("id-ID")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between font-bold border-t pt-1 text-slate-900">
+                        <span>Total Tagihan:</span>
+                        <span>
+                          Rp {((parseFloat(roomBasePrice) || 0) + (parseFloat(wifiFee) || 0)).toLocaleString("id-ID")}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="amount">
-                    Jumlah
+                    Total Pembayaran
                     {!selectedPayment && (
                       <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        {paymentType === "harian" ? "(otomatis)" : "(otomatis dari kamar)"}
+                        {paymentType === "harian" ? "(otomatis)" : "(otomatis)"}
                       </span>
                     )}
                   </Label>
@@ -873,6 +1050,11 @@ export default function Payments() {
                     ) : (
                       <span className="inline-flex text-[11px] font-semibold bg-sky-100 text-sky-700 border border-sky-200 rounded-full px-2.5 py-1">
                         {payment.payment_month}
+                      </span>
+                    )}
+                    {payment.wifi_devices && payment.wifi_devices > 0 && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-blue-100 text-blue-700 border border-blue-200 rounded-full px-2.5 py-1">
+                        <Wifi className="h-3 w-3" /> +{payment.wifi_devices} Wi-Fi
                       </span>
                     )}
                     <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -979,7 +1161,14 @@ export default function Payments() {
                     <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                       {format(new Date(payment.payment_date + "T00:00:00"), "d MMM yyyy", { locale: localeId })}
                     </TableCell>
-                    <TableCell className="text-right font-semibold whitespace-nowrap">Rp {payment.amount.toLocaleString("id-ID")}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
+                      <div className="font-semibold">Rp {payment.amount.toLocaleString("id-ID")}</div>
+                      {payment.wifi_devices && payment.wifi_devices > 0 && (
+                        <div className="text-[11px] text-blue-600 font-medium flex items-center justify-end gap-1">
+                          <Wifi className="h-3 w-3 inline" /> +{payment.wifi_devices} Wi-Fi (Rp {(payment.wifi_fee || 0).toLocaleString("id-ID")})
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-sm">{payment.payment_method}</TableCell>
                     <TableCell>
                       <div className="flex justify-end">

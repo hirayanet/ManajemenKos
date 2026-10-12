@@ -95,6 +95,8 @@ export type Database = {
           periode_selesai: string | null
           receipt_url: string | null
           resident_id: string
+          wifi_devices?: number | null
+          wifi_fee?: number | null
         }
         Insert: {
           amount: number
@@ -107,6 +109,8 @@ export type Database = {
           periode_selesai?: string | null
           receipt_url?: string | null
           resident_id: string
+          wifi_devices?: number | null
+          wifi_fee?: number | null
         }
         Update: {
           amount?: number
@@ -119,6 +123,8 @@ export type Database = {
           periode_selesai?: string | null
           receipt_url?: string | null
           resident_id?: string
+          wifi_devices?: number | null
+          wifi_fee?: number | null
         }
         Relationships: [
           {
