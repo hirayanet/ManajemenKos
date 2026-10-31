@@ -59,7 +59,7 @@ export async function generateKwitansiPDF(
   // ---- Identitas dari pengaturan (boleh ditimpa untuk pratinjau) ----
   const brand = overrides?.brand ?? (await fetchBrandSettings());
 
-  // ---- Periode sewa otomatis (dipertahankan dari versi lama) ----
+  // ---- Periode sewa otomatis (fallback jika periodeSewaOverride tidak diisi) ----
   let computedPeriodeSewa = "";
   try {
     const parseYMD = (s: string) => {
@@ -82,8 +82,11 @@ export async function generateKwitansiPDF(
       bulanSewa && monthsMap[bulanSewa] !== undefined ? monthsMap[bulanSewa] : bayar.getMonth();
 
     let rentYear = bayar.getFullYear();
+    // Bayar Desember untuk Januari tahun depan
     if (bayar.getMonth() === 11 && rentMonth === 0) rentYear += 1;
+    // Bayar Januari untuk Desember tahun lalu
     else if (bayar.getMonth() === 0 && rentMonth === 11) rentYear -= 1;
+    // Kasus lain (misal bayar akhir bulan untuk bulan berikutnya): tahun sama, tidak perlu koreksi
 
     const mulai = new Date(rentYear, rentMonth, masuk.getDate());
     const akhir = new Date(rentYear, rentMonth + 1, masuk.getDate());

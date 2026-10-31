@@ -122,6 +122,9 @@ export default function Payments() {
   const [wifiDevices, setWifiDevices] = useState("1");
   const [wifiFee, setWifiFee] = useState("25000");
   const [roomBasePrice, setRoomBasePrice] = useState("");
+  // State untuk pembayaran di muka (entry_date belum tercapai)
+  const [isAdvancePayment, setIsAdvancePayment] = useState(false);
+  const [advanceEntryDate, setAdvanceEntryDate] = useState<string>("");
 
   const handleToggleWifi = (checked: boolean) => {
     setHasWifiAddon(checked);
@@ -544,10 +547,14 @@ export default function Payments() {
     setWifiDevices("1");
     setWifiFee("25000");
     setRoomBasePrice("");
+    setIsAdvancePayment(false);
+    setAdvanceEntryDate("");
   };
 
   const openEditDialog = (payment: Payment) => {
     setSelectedPayment(payment);
+    setIsAdvancePayment(false);
+    setAdvanceEntryDate("");
     setFormData({
       resident_id: payment.resident_id,
       payment_date: payment.payment_date,
@@ -741,27 +748,89 @@ export default function Payments() {
                         : 0;
                       setRoomBasePrice(basePrice > 0 ? basePrice.toString() : "");
                       const total = basePrice + (hasWifiAddon ? (parseFloat(wifiFee) || 0) : 0);
-                      setFormData({ ...formData, resident_id: value, amount: total > 0 ? total.toString() : "" });
+
+                      // Deteksi pembayaran di muka: jika entry_date penghuni belum tercapai hari ini atau tanggal bayar
+                      let suggestedMonth = formData.payment_month;
+                      let advance = false;
+                      let entryDateStr = "";
+                      if (selectedResident?.entry_date) {
+                        const entryParts = selectedResident.entry_date.split("-").map(Number);
+                        if (entryParts.length === 3) {
+                          const entryDate = new Date(entryParts[0], entryParts[1] - 1, entryParts[2]);
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          const bayarParts = formData.payment_date ? formData.payment_date.split("-").map(Number) : [];
+                          const bayarDate = bayarParts.length === 3 ? new Date(bayarParts[0], bayarParts[1] - 1, bayarParts[2]) : today;
+                          if (entryDate > today || entryDate > bayarDate) {
+                            // Bayar di muka — otomatis set bulan sewa ke bulan masuk
+                            advance = true;
+                            entryDateStr = selectedResident.entry_date;
+                            const bulanMasuk = months[entryParts[1] - 1];
+                            suggestedMonth = bulanMasuk;
+                            toast({
+                              title: "📅 Pembayaran Di Muka",
+                              description: `Penghuni baru mulai sewa tanggal ${entryParts[2]} ${bulanMasuk} ${entryParts[0]}. Bulan sewa otomatis disesuaikan ke ${bulanMasuk}.`,
+                            });
+                          }
+                        }
+                      }
+                      setIsAdvancePayment(advance);
+                      setAdvanceEntryDate(entryDateStr);
+                      setFormData({ ...formData, resident_id: value, amount: total > 0 ? total.toString() : "", payment_month: suggestedMonth });
                     }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Pilih penghuni" />
                     </SelectTrigger>
                     <SelectContent>
-                      {residents.map((resident) => (
-                        <SelectItem key={resident.id} value={resident.id}>
-                          {resident.full_name} - Kamar {resident.rooms.room_number}
-                          {getRoomPrice(resident.rooms.room_number) > 0 && (
-                            <span className="ml-1 text-muted-foreground">
-                              (Rp {getRoomPrice(resident.rooms.room_number).toLocaleString("id-ID")})
-                            </span>
-                          )}
-                        </SelectItem>
-                      ))}
+                      {residents.map((resident) => {
+                        const isAdvance = (() => {
+                          if (!resident.entry_date) return false;
+                          const p = resident.entry_date.split("-").map(Number);
+                          if (p.length !== 3) return false;
+                          const d = new Date(p[0], p[1] - 1, p[2]);
+                          const now = new Date();
+                          now.setHours(0, 0, 0, 0);
+                          return d > now;
+                        })();
+                        return (
+                          <SelectItem key={resident.id} value={resident.id}>
+                            {resident.full_name} - Kamar {resident.rooms.room_number}
+                            {isAdvance && resident.entry_date && (
+                              <span className="ml-1 text-xs text-blue-600 font-medium">
+                                (Mulai: {resident.entry_date})
+                              </span>
+                            )}
+                            {getRoomPrice(resident.rooms.room_number) > 0 && (
+                              <span className="ml-1 text-muted-foreground">
+                                (Rp {getRoomPrice(resident.rooms.room_number).toLocaleString("id-ID")})
+                              </span>
+                            )}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 )}
               </div>
+
+              {/* Info banner: pembayaran di muka */}
+              {isAdvancePayment && (
+                <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                  <span className="mt-0.5 shrink-0">📅</span>
+                  <div>
+                    <p className="font-medium">Pembayaran Di Muka</p>
+                    <p className="text-xs mt-0.5 opacity-80">
+                      Penghuni belum masuk (masuk{" "}
+                      {(() => {
+                        const p = advanceEntryDate.split("-").map(Number);
+                        return p.length === 3 ? `${p[2]} ${months[p[1] - 1]} ${p[0]}` : advanceEntryDate;
+                      })()}
+                      ). Bulan sewa diubah ke <strong>{formData.payment_month}</strong> secara otomatis.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Daily fields — show when paymentType === harian */}
               {paymentType === "harian" && (

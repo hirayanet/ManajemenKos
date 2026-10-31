@@ -61,8 +61,17 @@ export function formatPeriodeSewa(input: PeriodeSewaInput): string {
   const masuk = parseYMD(input.entry_date);
   if (rentMonth !== undefined && bayar && masuk) {
     let rentYear = bayar.getFullYear();
-    if (bayar.getMonth() === 11 && rentMonth === 0) rentYear += 1; // bayar Desember untuk Januari
-    else if (bayar.getMonth() === 0 && rentMonth === 11) rentYear -= 1; // bayar Januari untuk Desember
+
+    // Koreksi tahun jika bulan bayar berbeda dengan bulan sewa:
+    // - Bayar Desember untuk Januari tahun depan
+    if (bayar.getMonth() === 11 && rentMonth === 0) rentYear += 1;
+    // - Bayar Januari untuk Desember tahun lalu
+    else if (bayar.getMonth() === 0 && rentMonth === 11) rentYear -= 1;
+    // - Bayar di bulan sebelumnya untuk bulan berikutnya (misal: bayar 31 Okt untuk November)
+    //   Tidak perlu koreksi tahun jika masih dalam satu tahun yang sama, namun
+    //   jika bayar di Desember-akhir untuk bulan sewa dengan indeks lebih kecil sudah ditangani di atas.
+    // Tidak ada koreksi tambahan yang diperlukan — bayar Okt untuk Nov = tahun sama ✓
+
     const tglMulai = new Date(rentYear, rentMonth, masuk.getDate());
     const tglSelesai = new Date(rentYear, rentMonth + 1, masuk.getDate());
     return `${fmtTgl(tglMulai)} - ${fmtTgl(tglSelesai)}`;
