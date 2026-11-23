@@ -57,6 +57,7 @@ export default function Residents() {
   const [statusFilter, setStatusFilter] = useState<"Aktif" | "Sudah Keluar" | "Semua">("Aktif");
   const [editMode, setEditMode] = useState<"single" | "multi">("single");
   const [exitTarget, setExitTarget] = useState<Resident | null>(null); // konfirmasi tandai keluar (tabel desktop)
+  const [exitDate, setExitDate] = useState<string>(""); // tanggal keluar yang dipilih
   const [deleteTarget, setDeleteTarget] = useState<Resident | null>(null); // konfirmasi hapus (tabel desktop)
   interface FormDataType {
     full_name: string;
@@ -588,16 +589,21 @@ export default function Residents() {
     setIsDialogOpen(true);
   };
 
+  const openExitDialog = (resident: Resident) => {
+    setExitDate(new Date().toISOString().split('T')[0]);
+    setExitTarget(resident);
+  };
+
   // Tambahkan fungsi handleMarkAsLeft di sini
-  const handleMarkAsLeft = async (resident: Resident) => {
+  const handleMarkAsLeft = async (resident: Resident, selectedDate?: string) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const finalExitDate = selectedDate || exitDate || new Date().toISOString().split('T')[0];
       
       const { error } = await supabase
         .from("residents")
         .update({
           status_penghuni: "Sudah Keluar",
-          tanggal_keluar: today,
+          tanggal_keluar: finalExitDate,
           is_active: false, // Tetap update is_active untuk kompatibilitas
         })
         .eq("id", resident.id);
@@ -606,7 +612,7 @@ export default function Residents() {
 
       toast({
         title: "Berhasil",
-        description: `${resident.full_name} telah ditandai sudah keluar`,
+        description: `${resident.full_name} telah ditandai keluar pada tanggal ${format(new Date(finalExitDate), 'dd/MM/yyyy')}`,
       });
       
       fetchResidents();
@@ -1033,7 +1039,7 @@ export default function Residents() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-amber-600 focus:text-amber-700"
-                                onClick={() => setExitTarget(resident)}
+                                onClick={() => openExitDialog(resident)}
                               >
                                 <LogOut className="h-4 w-4 mr-2" /> Tandai Keluar
                               </DropdownMenuItem>
@@ -1218,7 +1224,7 @@ export default function Residents() {
                             {isAktif && (
                               <>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem className="text-amber-600 focus:text-amber-700" onClick={() => setExitTarget(resident)}>
+                                <DropdownMenuItem className="text-amber-600 focus:text-amber-700" onClick={() => openExitDialog(resident)}>
                                   <LogOut className="h-4 w-4 mr-2" /> Tandai Keluar
                                 </DropdownMenuItem>
                               </>
@@ -1241,20 +1247,42 @@ export default function Residents() {
         </CardContent>
       </Card>
 
-      {/* Konfirmasi aksi (dipicu dari menu aksi tabel desktop) */}
+      {/* Konfirmasi aksi (dipicu dari menu aksi tabel desktop & kartu mobile) */}
       <AlertDialog open={!!exitTarget} onOpenChange={(o) => { if (!o) setExitTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Tandai Sudah Keluar</AlertDialogTitle>
             <AlertDialogDescription>
-              Apakah Anda yakin ingin menandai {exitTarget?.full_name} sebagai sudah keluar?
-              Tindakan ini akan mengubah status kamar menjadi kosong jika tidak ada penghuni aktif lainnya.
+              Tentukan tanggal keluar untuk <strong>{exitTarget?.full_name}</strong>. Status kamar akan menjadi kosong jika tidak ada penghuni aktif lainnya.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="py-2 space-y-2">
+            <Label htmlFor="exit_date_input" className="text-sm font-medium">
+              Tanggal Keluar
+            </Label>
+            <Input
+              id="exit_date_input"
+              type="date"
+              value={exitDate}
+              onChange={(e) => setExitDate(e.target.value)}
+              className="w-full"
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              💡 Default otomatis hari ini. Anda bisa mengubah tanggal jika penghuni sudah keluar beberapa hari lalu.
+            </p>
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { if (exitTarget) handleMarkAsLeft(exitTarget); setExitTarget(null); }}>
-              Tandai Sudah Keluar
+            <AlertDialogAction
+              disabled={!exitDate}
+              onClick={() => {
+                if (exitTarget) handleMarkAsLeft(exitTarget, exitDate);
+                setExitTarget(null);
+              }}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              Simpan & Tandai Keluar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
