@@ -250,13 +250,20 @@ export default function Payments() {
       ];
       const currentMonthName = months[currentMonth];
 
-      // Ambil semua pembayaran bulan berjalan beserta nomor kamar dari relasi resident -> rooms
-      const { data: paymentsThisMonth, error: paymentsError } = await supabase
+      // Batas awal dan akhir bulan berjalan (untuk mendeteksi pembayaran harian)
+      const monthStart = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-01`;
+      const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
+      const monthEnd = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+      // Query 1: Pembayaran BULANAN bulan berjalan
+      const { data: paymentsMonthly, error: paymentsError } = await supabase
         .from("payments")
         .select(`
           resident_id,
           payment_month,
           payment_date,
+          periode_mulai,
+          periode_selesai,
           residents (
             rooms ( room_number )
           )
@@ -265,9 +272,30 @@ export default function Payments() {
         .filter('payment_date', 'gte', `${currentYear}-01-01`); // Pastikan tahun sama
 
       if (paymentsError) throw paymentsError;
-      // Kumpulkan nomor kamar yang sudah memiliki pembayaran bulan berjalan
+
+      // Query 2: Pembayaran HARIAN yang periode_mulai atau periode_selesai jatuh di bulan berjalan
+      // (payment_month-nya berformat "Harian: ..." bukan nama bulan, sehingga tidak tertangkap Query 1)
+      const { data: paymentsDaily, error: dailyError } = await supabase
+        .from("payments")
+        .select(`
+          resident_id,
+          payment_month,
+          periode_mulai,
+          periode_selesai,
+          residents (
+            rooms ( room_number )
+          )
+        `)
+        .like("payment_month", "Harian:%")
+        .or(`periode_mulai.gte.${monthStart},periode_selesai.lte.${monthEnd}`)
+        .filter('periode_mulai', 'gte', `${currentYear}-01-01`);
+
+      if (dailyError) throw dailyError;
+
+      // Kumpulkan nomor kamar yang sudah memiliki pembayaran bulan berjalan (bulanan ATAU harian)
+      const allPaymentsThisMonth = [...(paymentsMonthly || []), ...(paymentsDaily || [])];
       const paidRoomNumbers = new Set(
-        (paymentsThisMonth || [])
+        allPaymentsThisMonth
           .map((p: any) => p?.residents?.rooms?.room_number)
           .filter((n: any) => n !== null && n !== undefined)
       );
