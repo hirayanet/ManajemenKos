@@ -812,21 +812,23 @@ export default function Payments() {
                     </SelectTrigger>
                     <SelectContent>
                       {residents.map((resident) => {
-                        const isAdvance = (() => {
-                          if (!resident.entry_date) return false;
+                        // Format entry_date ISO → "1 Desember 2026" jika penghuni belum masuk
+                        const advanceLabel = (() => {
+                          if (!resident.entry_date) return null;
                           const p = resident.entry_date.split("-").map(Number);
-                          if (p.length !== 3) return false;
+                          if (p.length !== 3) return null;
                           const d = new Date(p[0], p[1] - 1, p[2]);
                           const now = new Date();
                           now.setHours(0, 0, 0, 0);
-                          return d > now;
+                          if (d <= now) return null;
+                          return `${p[2]} ${months[p[1] - 1]} ${p[0]}`;
                         })();
                         return (
                           <SelectItem key={resident.id} value={resident.id}>
                             {resident.full_name} - Kamar {resident.rooms.room_number}
-                            {isAdvance && resident.entry_date && (
+                            {advanceLabel && (
                               <span className="ml-1 text-xs text-blue-600 font-medium">
-                                (Mulai: {resident.entry_date})
+                                (Mulai: {advanceLabel})
                               </span>
                             )}
                             {getRoomPrice(resident.rooms.room_number) > 0 && (
@@ -841,24 +843,6 @@ export default function Payments() {
                   </Select>
                 )}
               </div>
-
-              {/* Info banner: pembayaran di muka */}
-              {isAdvancePayment && (
-                <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">
-                  <span className="mt-0.5 shrink-0">📅</span>
-                  <div>
-                    <p className="font-medium">Pembayaran Di Muka</p>
-                    <p className="text-xs mt-0.5 opacity-80">
-                      Penghuni belum masuk (masuk{" "}
-                      {(() => {
-                        const p = advanceEntryDate.split("-").map(Number);
-                        return p.length === 3 ? `${p[2]} ${months[p[1] - 1]} ${p[0]}` : advanceEntryDate;
-                      })()}
-                      ). Bulan sewa diubah ke <strong>{formData.payment_month}</strong> secara otomatis.
-                    </p>
-                  </div>
-                </div>
-              )}
 
               {/* Daily fields — show when paymentType === harian */}
               {paymentType === "harian" && (

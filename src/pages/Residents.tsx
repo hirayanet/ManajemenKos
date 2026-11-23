@@ -969,106 +969,155 @@ export default function Residents() {
               })
               .slice()
               .sort((a, b) => ((a.rooms?.room_number ?? 0) - (b.rooms?.room_number ?? 0)))
-              .map((resident) => (
+              .map((resident) => {
+                const isAktif = (resident.status_penghuni || 'Aktif') === 'Aktif';
+                return (
                 <div key={resident.id} className="rounded-xl border border-muted p-3 bg-card text-card-foreground shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <InitialsAvatar name={resident.full_name} seed={resident.rooms?.room_number ?? resident.room_id} className="h-10 w-10 text-sm" />
+                  {/* Header Kartu: Nama, Kamar, No HP (WA), dan Menu Titik Tiga */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <InitialsAvatar name={resident.full_name} seed={resident.rooms?.room_number ?? resident.room_id} className="h-10 w-10 text-sm shrink-0" />
                       <div className="min-w-0">
-                        <div className="truncate text-base font-semibold">{resident.full_name}</div>
-                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                        <div className="truncate text-base font-semibold leading-tight">{resident.full_name}</div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                           <Home className="h-3 w-3" /> Kamar {resident.rooms?.room_number ?? resident.room_id}
                         </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <a href={toWhatsAppLink(resident.phone_number)} target="_blank" rel="noreferrer" className="block text-sm font-medium" title="Chat WhatsApp">{resident.phone_number}</a>
-                      <div className="text-[11px] text-muted-foreground">Masuk: {format(new Date(resident.entry_date), 'dd/MM/yyyy')}</div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <div className="text-right">
+                        <a
+                          href={toWhatsAppLink(resident.phone_number)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200 transition-colors"
+                          title="Chat WhatsApp"
+                        >
+                          <MessageCircle className="h-3 w-3" />
+                          {resident.phone_number}
+                        </a>
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                          Masuk: {format(new Date(resident.entry_date), 'dd/MM/yyyy')}
+                        </div>
+                      </div>
+
+                      {/* Dropdown Menu Titik Tiga (Opsi Sekunder) */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground shrink-0 -mr-1"
+                            aria-label="Menu opsi"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52">
+                          {resident.ktp_image_url && (
+                            <DropdownMenuItem onClick={() => window.open(resident.ktp_image_url!, '_blank')}>
+                              <User className="h-4 w-4 mr-2" /> Lihat KTP
+                            </DropdownMenuItem>
+                          )}
+                          {resident.marriage_document_url && (
+                            <DropdownMenuItem onClick={() => window.open(resident.marriage_document_url!, '_blank')}>
+                              <Upload className="h-4 w-4 mr-2" /> Dokumen Nikah
+                            </DropdownMenuItem>
+                          )}
+                          {(resident.ktp_image_url || resident.marriage_document_url) && <DropdownMenuSeparator />}
+                          <DropdownMenuItem onClick={() => openEditDialog(resident)}>
+                            <Edit className="h-4 w-4 mr-2" /> Edit Data
+                          </DropdownMenuItem>
+                          {isAktif && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-amber-600 focus:text-amber-700"
+                                onClick={() => setExitTarget(resident)}
+                              >
+                                <LogOut className="h-4 w-4 mr-2" /> Tandai Keluar
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => setDeleteTarget(resident)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" /> Hapus Penghuni
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <div className="flex flex-col gap-0.5">
-                      <div className="text-[11px] text-muted-foreground leading-none">Status</div>
-                      <div className="text-sm font-medium leading-tight">{resident.status_penghuni || 'Aktif'}</div>
+
+                  {/* Informasi Status & Dokumen */}
+                  <div className="mt-2.5 pt-2 border-t border-border/40 space-y-2">
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] text-muted-foreground">Status:</span>
+                        <span className={`inline-flex text-[11px] font-semibold border rounded-full px-2 py-0.5 ${
+                          isAktif ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-700 border-slate-200"
+                        }`}>
+                          {resident.status_penghuni || 'Aktif'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <span className="text-[11px] text-muted-foreground">Nikah:</span>
+                        <span className={`inline-flex text-[11px] font-medium border rounded-full px-2 py-0.5 ${
+                          resident.marital_status === "Menikah" ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-slate-100 text-slate-700 border-slate-200"
+                        }`}>
+                          {resident.marital_status || 'Lajang'}
+                        </span>
+                      </div>
+                      {statusFilter === 'Sudah Keluar' && (
+                        <div className="col-span-2 flex items-center gap-1.5">
+                          <span className="text-[11px] text-muted-foreground">Tanggal Keluar:</span>
+                          <span className="font-medium">{resident.tanggal_keluar ? format(new Date(resident.tanggal_keluar), 'dd/MM/yyyy') : '-'}</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex flex-col gap-0.5 text-right items-end">
-                      <div className="text-[11px] text-muted-foreground leading-none">Pernikahan</div>
-                      <div className="text-sm font-medium leading-tight">{resident.marital_status || 'Lajang'}</div>
-                    </div>
-                    {statusFilter === 'Sudah Keluar' && (
-                      <div className="col-span-2 flex flex-col gap-0.5">
-                        <div className="text-[11px] text-muted-foreground leading-none">Tanggal Keluar</div>
-                        <div className="text-sm font-medium leading-tight">{resident.tanggal_keluar ? format(new Date(resident.tanggal_keluar), 'dd/MM/yyyy') : '-'}</div>
+
+                    {/* Chip Dokumen: KTP & Dokumen Nikah */}
+                    {(resident.ktp_image_url || resident.marriage_document_url) && (
+                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                        <span className="text-[11px] text-muted-foreground mr-0.5">Dokumen:</span>
+                        {resident.ktp_image_url && (
+                          <button
+                            type="button"
+                            onClick={() => window.open(resident.ktp_image_url!, '_blank')}
+                            className="inline-flex items-center gap-1 text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full hover:bg-blue-100 active:scale-95 transition-all cursor-pointer"
+                          >
+                            <User className="h-3 w-3" /> KTP
+                          </button>
+                        )}
+                        {resident.marriage_document_url && (
+                          <button
+                            type="button"
+                            onClick={() => window.open(resident.marriage_document_url!, '_blank')}
+                            className="inline-flex items-center gap-1 text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200 px-2.5 py-0.5 rounded-full hover:bg-rose-100 active:scale-95 transition-all cursor-pointer"
+                          >
+                            <Upload className="h-3 w-3" /> Dokumen Nikah
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
-                  {/* Document links row */}
-                  {(resident.ktp_image_url || resident.marriage_document_url) && (
-                    <div className="mt-3 flex items-center gap-2">
-                      {resident.ktp_image_url && (
-                        <Button variant="outline" size="sm" onClick={() => window.open(resident.ktp_image_url!, '_blank')} className="flex-1 rounded-full">
-                          <User className="h-4 w-4 mr-2" /> Lihat KTP
-                        </Button>
-                      )}
-                      {resident.marriage_document_url && (
-                        <Button variant="outline" size="sm" onClick={() => window.open(resident.marriage_document_url!, '_blank')} className="flex-1 rounded-full">
-                          <Upload className="h-4 w-4 mr-2" /> Dokumen Nikah
-                        </Button>
-                      )}
-                    </div>
-                  )}
 
-                  <div className="mt-3 grid grid-cols-3 gap-2">
-                    <Button variant="outline" size="sm" className="w-full rounded-full" onClick={() => openEditDialog(resident)}>
-                      Edit
+                  {/* Tombol Aksi Utama: Edit Data */}
+                  <div className="mt-2.5 pt-2 border-t border-border/40">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full rounded-lg h-8 text-xs font-medium hover:bg-primary/5 hover:text-primary hover:border-primary/30"
+                      onClick={() => openEditDialog(resident)}
+                    >
+                      <Edit className="h-3.5 w-3.5 mr-1.5" /> Edit Data Penghuni
                     </Button>
-                    {resident.status_penghuni === 'Aktif' && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="outline" size="sm" className="w-full rounded-full bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 hover:text-amber-700">
-                            Tandai Keluar
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Tandai Sudah Keluar</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Apakah Anda yakin ingin menandai {resident.full_name} sebagai sudah keluar?
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Batal</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleMarkAsLeft(resident)}>
-                              Tandai Sudah Keluar
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    )}
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="outline" size="sm" className="w-full rounded-full bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20 hover:text-destructive">
-                          Hapus
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Hapus Penghuni</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Apakah Anda yakin ingin menghapus {resident.full_name}? Tindakan ini tidak dapat dibatalkan.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Batal</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDelete(resident.id)}>
-                            Hapus
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             {residents.length === 0 && (
               <div className="text-center text-muted-foreground py-2">Tidak ada data.</div>
             )}
